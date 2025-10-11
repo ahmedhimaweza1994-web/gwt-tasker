@@ -63,6 +63,7 @@ export const tasks = pgTable("tasks", {
   estimatedHours: integer("estimated_hours"),
   actualHours: integer("actual_hours"),
   performanceRating: integer("performance_rating"), // نقاط الأداء من 1 إلى 5
+  rewardPoints: integer("reward_points").default(0), // نقاط المكافأة للمهمة
   ratedBy: uuid("rated_by").references(() => users.id, { onDelete: "set null" }),
   ratedAt: timestamp("rated_at"),
   tags: text("tags").array(),
