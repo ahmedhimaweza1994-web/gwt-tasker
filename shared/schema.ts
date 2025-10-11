@@ -212,8 +212,20 @@ export const meetingParticipants = pgTable("meeting_participants", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Google Calendar OAuth Tokens
+export const googleCalendarTokens = pgTable("google_calendar_tokens", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  scope: text("scope").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Relations
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ many, one }) => ({
   auxSessions: many(auxSessions),
   createdTasks: many(tasks, { relationName: "createdTasks" }),
   assignedTasks: many(tasks, { relationName: "assignedTasks" }),
@@ -229,6 +241,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   messageReactions: many(messageReactions),
   scheduledMeetings: many(meetings),
   meetingParticipations: many(meetingParticipants),
+  googleCalendarToken: one(googleCalendarTokens),
 }));
 
 export const auxSessionsRelations = relations(auxSessions, ({ one }) => ({
@@ -303,6 +316,10 @@ export const meetingParticipantsRelations = relations(meetingParticipants, ({ on
   user: one(users, { fields: [meetingParticipants.userId], references: [users.id] }),
 }));
 
+export const googleCalendarTokensRelations = relations(googleCalendarTokens, ({ one }) => ({
+  user: one(users, { fields: [googleCalendarTokens.userId], references: [users.id] }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -363,6 +380,12 @@ export const insertMeetingSchema = createInsertSchema(meetings).omit({
   createdAt: true,
 });
 
+export const insertGoogleCalendarTokenSchema = createInsertSchema(googleCalendarTokens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -387,3 +410,5 @@ export type MessageReaction = typeof messageReactions.$inferSelect;
 export type Meeting = typeof meetings.$inferSelect;
 export type InsertMeeting = z.infer<typeof insertMeetingSchema>;
 export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
+export type GoogleCalendarToken = typeof googleCalendarTokens.$inferSelect;
+export type InsertGoogleCalendarToken = z.infer<typeof insertGoogleCalendarTokenSchema>;
