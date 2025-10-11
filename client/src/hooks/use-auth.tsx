@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { User, insertUserSchema } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { z } from "zod";
 
 type AuthUser = Omit<User, 'password'>;
@@ -30,8 +30,6 @@ type RegisterData = z.infer<typeof insertUserSchema>;
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { toast } = useToast();
-  
   const {
     data: user,
     error,
