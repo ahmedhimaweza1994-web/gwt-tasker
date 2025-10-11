@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   Building,
   FileText,
-  UserCog
+  UserCog,
+  MessageSquare
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,12 @@ export default function Sidebar() {
       href: "/tasks",
       icon: CheckSquare,
       badge: totalTasks > 0 ? totalTasks.toString() : null,
+    },
+    {
+      name: "الدردشة",
+      href: "/chat",
+      icon: MessageSquare,
+      badge: null,
     },
     {
       name: "التقارير",

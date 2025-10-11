@@ -772,6 +772,272 @@ export function registerRoutes(app: Express): Server {
     });
   });
 
+  // Chat Rooms Routes
+  app.post("/api/chat/rooms", requireAuth, async (req, res) => {
+    try {
+      const room = await storage.createChatRoom({
+        name: req.body.name,
+        type: req.body.type || 'group',
+        createdBy: req.user!.id,
+      });
+      
+      if (req.body.memberIds && Array.isArray(req.body.memberIds)) {
+        for (const memberId of req.body.memberIds) {
+          await storage.addChatRoomMember(room.id, memberId);
+        }
+      }
+      
+      await storage.addChatRoomMember(room.id, req.user!.id);
+      
+      res.status(201).json(room);
+    } catch (error) {
+      console.error("Error creating chat room:", error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء غرفة الدردشة" });
+    }
+  });
+
+  app.post("/api/chat/private", requireAuth, async (req, res) => {
+    try {
+      const { otherUserId } = req.body;
+      const room = await storage.getOrCreatePrivateChat(req.user!.id, otherUserId);
+      res.json(room);
+    } catch (error) {
+      console.error("Error creating private chat:", error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء الدردشة الخاصة" });
+    }
+  });
+
+  app.get("/api/chat/rooms", requireAuth, async (req, res) => {
+    try {
+      const rooms = await storage.getUserChatRooms(req.user!.id);
+      res.json(rooms);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب غرف الدردشة" });
+    }
+  });
+
+  app.get("/api/chat/rooms/:id", requireAuth, async (req, res) => {
+    try {
+      const room = await storage.getChatRoom(req.params.id);
+      if (!room) {
+        return res.status(404).json({ message: "غرفة الدردشة غير موجودة" });
+      }
+      res.json(room);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب غرفة الدردشة" });
+    }
+  });
+
+  // Chat Messages Routes
+  app.post("/api/chat/messages", requireAuth, async (req, res) => {
+    try {
+      const message = await storage.createChatMessage({
+        roomId: req.body.roomId,
+        senderId: req.user!.id,
+        content: req.body.content,
+        messageType: req.body.messageType || 'text',
+        attachments: req.body.attachments,
+        replyTo: req.body.replyTo,
+      });
+      
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_message',
+            data: message
+          }));
+        }
+      });
+      
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Error creating message:", error);
+      res.status(500).json({ message: "حدث خطأ في إرسال الرسالة" });
+    }
+  });
+
+  app.get("/api/chat/messages/:roomId", requireAuth, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const messages = await storage.getChatMessages(req.params.roomId, limit);
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الرسائل" });
+    }
+  });
+
+  app.put("/api/chat/messages/:id", requireAuth, async (req, res) => {
+    try {
+      const message = await storage.updateChatMessage(req.params.id, req.body.content);
+      if (!message) {
+        return res.status(404).json({ message: "الرسالة غير موجودة" });
+      }
+      
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'message_updated',
+            data: message
+          }));
+        }
+      });
+      
+      res.json(message);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تحديث الرسالة" });
+    }
+  });
+
+  app.delete("/api/chat/messages/:id", requireAuth, async (req, res) => {
+    try {
+      const success = await storage.deleteChatMessage(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "الرسالة غير موجودة" });
+      }
+      
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'message_deleted',
+            data: { messageId: req.params.id }
+          }));
+        }
+      });
+      
+      res.json({ message: "تم حذف الرسالة بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في حذف الرسالة" });
+    }
+  });
+
+  // Message Reactions Routes
+  app.post("/api/chat/reactions", requireAuth, async (req, res) => {
+    try {
+      const reaction = await storage.addMessageReaction(
+        req.body.messageId,
+        req.user!.id,
+        req.body.emoji
+      );
+      
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'reaction_added',
+            data: reaction
+          }));
+        }
+      });
+      
+      res.status(201).json(reaction);
+    } catch (error) {
+      console.error("Error adding reaction:", error);
+      res.status(500).json({ message: "حدث خطأ في إضافة التفاعل" });
+    }
+  });
+
+  app.delete("/api/chat/reactions", requireAuth, async (req, res) => {
+    try {
+      await storage.removeMessageReaction(
+        req.body.messageId,
+        req.user!.id,
+        req.body.emoji
+      );
+      
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'reaction_removed',
+            data: {
+              messageId: req.body.messageId,
+              userId: req.user!.id,
+              emoji: req.body.emoji
+            }
+          }));
+        }
+      });
+      
+      res.json({ message: "تم إزالة التفاعل بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إزالة التفاعل" });
+    }
+  });
+
+  // Meetings Routes
+  app.post("/api/meetings", requireAuth, async (req, res) => {
+    try {
+      const meeting = await storage.createMeeting({
+        title: req.body.title,
+        description: req.body.description,
+        meetingLink: req.body.meetingLink,
+        scheduledBy: req.user!.id,
+        startTime: new Date(req.body.startTime),
+        endTime: req.body.endTime ? new Date(req.body.endTime) : null,
+      });
+      
+      if (req.body.participantIds && Array.isArray(req.body.participantIds)) {
+        for (const participantId of req.body.participantIds) {
+          await storage.addMeetingParticipant(meeting.id, participantId);
+          
+          const privateRoom = await storage.getOrCreatePrivateChat(req.user!.id, participantId);
+          
+          await storage.createChatMessage({
+            roomId: privateRoom.id,
+            senderId: req.user!.id,
+            content: `تم جدولة اجتماع: ${meeting.title}`,
+            messageType: 'meeting_link',
+            attachments: [{
+              name: meeting.title,
+              url: meeting.meetingLink,
+              type: 'meeting'
+            }],
+          });
+          
+          await storage.createNotification(
+            participantId,
+            "اجتماع جديد",
+            `تم جدولة اجتماع: ${meeting.title}`,
+            "info"
+          );
+        }
+      }
+      
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_meeting',
+            data: meeting
+          }));
+        }
+      });
+      
+      res.status(201).json(meeting);
+    } catch (error) {
+      console.error("Error creating meeting:", error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء الاجتماع" });
+    }
+  });
+
+  app.get("/api/meetings", requireAuth, async (req, res) => {
+    try {
+      const meetings = await storage.getUserMeetings(req.user!.id);
+      res.json(meetings);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الاجتماعات" });
+    }
+  });
+
+  app.get("/api/meetings/:id", requireAuth, async (req, res) => {
+    try {
+      const meeting = await storage.getMeeting(req.params.id);
+      if (!meeting) {
+        return res.status(404).json({ message: "الاجتماع غير موجود" });
+      }
+      res.json(meeting);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الاجتماع" });
+    }
+  });
+
   // Broadcast real-time updates periodically
   setInterval(async () => {
     try {
