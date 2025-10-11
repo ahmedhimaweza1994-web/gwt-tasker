@@ -91,11 +91,48 @@ export function registerRoutes(app: Express): Server {
 
   app.put("/api/tasks/:id", requireAuth, async (req, res) => {
     try {
-      const task = await storage.updateTask(req.params.id, req.body);
-      if (!task) {
+      // Get the existing task first
+      const existingTask = await storage.getTask(req.params.id);
+      if (!existingTask) {
         return res.status(404).json({ message: "المهمة غير موجودة" });
       }
-      res.json(task);
+
+      // Check if trying to update status to 'completed'
+      if (req.body.status === 'completed') {
+        const isCreator = existingTask.createdBy === req.user!.id;
+        const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+        if (isCreator || isAdminOrSubAdmin) {
+          // Allow direct completion and set completedAt
+          const task = await storage.updateTask(req.params.id, {
+            ...req.body,
+            completedAt: new Date()
+          });
+          res.json(task);
+        } else {
+          // Change status to 'under_review' instead
+          const task = await storage.updateTask(req.params.id, {
+            ...req.body,
+            status: 'under_review'
+          });
+
+          // Notify the task creator
+          if (existingTask.createdBy) {
+            await storage.createNotification(
+              existingTask.createdBy,
+              "مهمة جاهزة للمراجعة",
+              `المهمة "${existingTask.title}" جاهزة للمراجعة`,
+              "info"
+            );
+          }
+
+          res.json(task);
+        }
+      } else {
+        // Normal update for other status changes
+        const task = await storage.updateTask(req.params.id, req.body);
+        res.json(task);
+      }
     } catch (error) {
       res.status(500).json({ message: "حدث خطأ في تحديث المهمة" });
     }
@@ -202,6 +239,48 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "حدث خطأ في تقييم المهمة" });
     }
   });
+
+  app.put("/api/tasks/:id/assign-points", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const { rewardPoints } = req.body;
+      
+      // Validate rewardPoints
+      if (rewardPoints === undefined || rewardPoints === null || typeof rewardPoints !== 'number' || rewardPoints < 0) {
+        return res.status(400).json({ message: "يجب تحديد نقاط مكافأة صحيحة" });
+      }
+
+      // Get the task
+      const existingTask = await storage.getTask(req.params.id);
+      if (!existingTask) {
+        return res.status(404).json({ message: "المهمة غير موجودة" });
+      }
+
+      // Update task's rewardPoints
+      const task = await storage.updateTask(req.params.id, { rewardPoints });
+
+      // If task is assigned to someone, add points to their totalPoints
+      if (task && task.assignedTo) {
+        const assignedUser = await storage.getUser(task.assignedTo);
+        if (assignedUser) {
+          const newTotalPoints = (assignedUser.totalPoints || 0) + rewardPoints;
+          await storage.updateUser(task.assignedTo, { totalPoints: newTotalPoints });
+
+          // Notify the assigned user about the reward points
+          await storage.createNotification(
+            task.assignedTo,
+            "نقاط مكافأة جديدة",
+            `تم منحك ${rewardPoints} نقطة مكافأة للمهمة "${task.title}"`,
+            "success"
+          );
+        }
+      }
+
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تعيين نقاط المكافأة" });
+    }
+  });
+
   // AUX Session routes
   app.post("/api/aux/start", requireAuth, async (req, res) => {
     try {
