@@ -4,6 +4,20 @@
 
 GWT Task Management is a comprehensive Arabic-language task and employee management system designed for companies. The application provides real-time employee activity tracking through AUX (auxiliary) status monitoring, task management with Kanban boards, HR management features, and analytics reporting. Built as a full-stack web application with modern technologies, it serves employees, sub-admins, and administrators with role-based access control.
 
+## Recent Changes
+
+### October 11, 2025 - Google Calendar OAuth 2.0 Integration
+- **Migrated from Replit-specific connector to portable OAuth 2.0** - Replaced Replit's Google Calendar connector with standard OAuth 2.0 flow
+- **Database**: Added `google_calendar_tokens` table to store user OAuth tokens (access_token, refresh_token, expires_at)
+- **Backend**: Implemented full OAuth flow with authorization, callback, token storage, and automatic token refresh
+- **Frontend**: Added "Connect Google Calendar" button in meeting dialog for in-app authentication
+- **API Endpoints**:
+  - `GET /api/google-calendar/auth` - Initiates OAuth flow
+  - `GET /api/google-calendar/callback` - Handles OAuth callback and stores tokens
+  - `GET /api/google-calendar/status` - Checks connection status
+  - `DELETE /api/google-calendar/disconnect` - Disconnects Google Calendar
+- **Portability**: Solution now works on any VPS without Replit dependencies
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -155,6 +169,19 @@ Preferred communication style: Simple, everyday language.
 - `DATABASE_URL` - PostgreSQL connection string (Neon database)
 - `SESSION_SECRET` - Secret key for session encryption (defaults to development key)
 - `NODE_ENV` - Environment mode (development/production)
+
+**Google Calendar OAuth Configuration:**
+- `GOOGLE_CLIENT_ID` - Google OAuth 2.0 Client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth 2.0 Client Secret
+- `GOOGLE_REDIRECT_URI` - OAuth callback URL (e.g., `https://yourdomain.com/api/google-calendar/callback`)
+
+To set up Google Calendar integration:
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Google Calendar API
+4. Go to "Credentials" and create OAuth 2.0 Client ID
+5. Add authorized redirect URIs: `https://yourdomain.com/api/google-calendar/callback`
+6. Copy the Client ID and Client Secret to your environment variables
 
 **Build Configuration:**
 - Separate client and server builds

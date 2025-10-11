@@ -17,8 +17,8 @@ export function getOAuth2Client(): OAuth2Client {
   );
 }
 
-// Generate authorization URL for user to consent
-export function getAuthorizationUrl(): string {
+// Generate authorization URL for user to consent with CSRF protection
+export function getAuthorizationUrl(state: string): string {
   const oauth2Client = getOAuth2Client();
   
   const scopes = [
@@ -30,6 +30,7 @@ export function getAuthorizationUrl(): string {
     access_type: 'offline', // Important: get refresh token
     scope: scopes,
     prompt: 'consent', // Force consent screen to get refresh token every time
+    state: state, // CSRF protection
   });
 }
 

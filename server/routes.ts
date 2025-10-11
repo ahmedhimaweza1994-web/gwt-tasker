@@ -1054,10 +1054,16 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/google-calendar/auth", requireAuth, async (req, res) => {
     try {
       const { getAuthorizationUrl } = await import("./google-calendar");
-      const authUrl = getAuthorizationUrl();
+      const crypto = await import("crypto");
       
-      // Store user ID in session for callback
+      // Generate cryptographically secure random state for CSRF protection
+      const state = crypto.randomBytes(32).toString('hex');
+      
+      // Store state and user ID in session for callback validation
+      req.session.googleAuthState = state;
       req.session.googleAuthUserId = req.user!.id;
+      
+      const authUrl = getAuthorizationUrl(state);
       
       res.json({ authUrl });
     } catch (error) {
@@ -1070,9 +1076,29 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/google-calendar/callback", async (req, res) => {
     try {
       const code = req.query.code as string;
+      const state = req.query.state as string;
       const userId = req.session.googleAuthUserId;
+      const sessionState = req.session.googleAuthState;
+      
+      // Validate CSRF state parameter
+      if (!state || !sessionState || state !== sessionState) {
+        console.error("OAuth state mismatch - possible CSRF attack");
+        // Clear session state to prevent replay attempts
+        delete req.session.googleAuthState;
+        delete req.session.googleAuthUserId;
+        return res.redirect("/?error=auth_failed");
+      }
       
       if (!code || !userId) {
+        return res.redirect("/?error=auth_failed");
+      }
+      
+      // Verify the user exists and the session is valid
+      const user = await storage.getUser(userId);
+      if (!user || !user.isActive) {
+        console.error("Invalid or inactive user in OAuth callback");
+        delete req.session.googleAuthState;
+        delete req.session.googleAuthUserId;
         return res.redirect("/?error=auth_failed");
       }
       
@@ -1084,6 +1110,7 @@ export function registerRoutes(app: Express): Server {
       
       // Clean up session
       delete req.session.googleAuthUserId;
+      delete req.session.googleAuthState;
       
       // Redirect back to app with success
       res.redirect("/?google_calendar_connected=true");
