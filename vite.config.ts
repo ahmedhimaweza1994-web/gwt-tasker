@@ -27,17 +27,23 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "client", "src"),  // غيرنا import.meta.dirname إلى __dirname
-      "@shared": path.resolve(__dirname, "shared"),  // غيرنا import.meta.dirname إلى __dirname
-      "@assets": path.resolve(__dirname, "attached_assets"),  // غيرنا import.meta.dirname إلى __dirname
+      "@": path.resolve(__dirname, "client", "src"),
+      "@shared": path.resolve(__dirname, "shared"),
+      "@assets": path.resolve(__dirname, "attached_assets"),
     },
   },
-  root: path.resolve(__dirname, "client"),  // غيرنا import.meta.dirname إلى __dirname
+  root: path.resolve(__dirname, "client"),
   build: {
-    outDir: path.resolve(__dirname, "dist/public"),  // غيرنا import.meta.dirname إلى __dirname
+    outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
   },
   server: {
+    host: "0.0.0.0",
+    port: 5000,
+    strictPort: true,
+    hmr: {
+      clientPort: 443,
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],
