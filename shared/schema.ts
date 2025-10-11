@@ -12,6 +12,8 @@ export const taskPriorityEnum = pgEnum('task_priority', ['low', 'medium', 'high'
 export const leaveTypeEnum = pgEnum('leave_type', ['annual', 'sick', 'maternity', 'emergency']);
 export const leaveStatusEnum = pgEnum('leave_status', ['pending', 'approved', 'rejected']);
 export const advanceStatusEnum = pgEnum('advance_status', ['pending', 'approved', 'rejected']);
+export const chatRoomTypeEnum = pgEnum('chat_room_type', ['private', 'group']);
+export const messageTypeEnum = pgEnum('message_type', ['text', 'image', 'file', 'meeting_link']);
 
 // Users table
 export const users = pgTable("users", {
@@ -146,6 +148,67 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Chat Rooms
+export const chatRooms = pgTable("chat_rooms", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name"),
+  type: chatRoomTypeEnum("type").notNull().default('group'),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Chat Room Members
+export const chatRoomMembers = pgTable("chat_room_members", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  roomId: uuid("room_id").notNull().references(() => chatRooms.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+});
+
+// Chat Messages
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  roomId: uuid("room_id").notNull().references(() => chatRooms.id, { onDelete: "cascade" }),
+  senderId: uuid("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content"),
+  messageType: messageTypeEnum("message_type").notNull().default('text'),
+  attachments: jsonb("attachments").$type<{ name: string; url: string; type: string }[]>(),
+  replyTo: uuid("reply_to"),
+  isEdited: boolean("is_edited").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Message Reactions
+export const messageReactions = pgTable("message_reactions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: uuid("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Meetings
+export const meetings = pgTable("meetings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  meetingLink: text("meeting_link").notNull(),
+  scheduledBy: uuid("scheduled_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Meeting Participants
+export const meetingParticipants = pgTable("meeting_participants", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  meetingId: uuid("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   auxSessions: many(auxSessions),
@@ -157,6 +220,12 @@ export const usersRelations = relations(users, ({ many }) => ({
   salaryAdvanceRequests: many(salaryAdvanceRequests),
   shifts: many(shifts),
   notifications: many(notifications),
+  createdChatRooms: many(chatRooms),
+  chatRoomMemberships: many(chatRoomMembers),
+  chatMessages: many(chatMessages),
+  messageReactions: many(messageReactions),
+  scheduledMeetings: many(meetings),
+  meetingParticipations: many(meetingParticipants),
 }));
 
 export const auxSessionsRelations = relations(auxSessions, ({ one }) => ({
@@ -197,6 +266,38 @@ export const shiftsRelations = relations(shifts, ({ one }) => ({
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, { fields: [notifications.userId], references: [users.id] }),
+}));
+
+export const chatRoomsRelations = relations(chatRooms, ({ one, many }) => ({
+  createdBy: one(users, { fields: [chatRooms.createdBy], references: [users.id] }),
+  members: many(chatRoomMembers),
+  messages: many(chatMessages),
+}));
+
+export const chatRoomMembersRelations = relations(chatRoomMembers, ({ one }) => ({
+  room: one(chatRooms, { fields: [chatRoomMembers.roomId], references: [chatRooms.id] }),
+  user: one(users, { fields: [chatRoomMembers.userId], references: [users.id] }),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one, many }) => ({
+  room: one(chatRooms, { fields: [chatMessages.roomId], references: [chatRooms.id] }),
+  sender: one(users, { fields: [chatMessages.senderId], references: [users.id] }),
+  reactions: many(messageReactions),
+}));
+
+export const messageReactionsRelations = relations(messageReactions, ({ one }) => ({
+  message: one(chatMessages, { fields: [messageReactions.messageId], references: [chatMessages.id] }),
+  user: one(users, { fields: [messageReactions.userId], references: [users.id] }),
+}));
+
+export const meetingsRelations = relations(meetings, ({ one, many }) => ({
+  scheduledBy: one(users, { fields: [meetings.scheduledBy], references: [users.id] }),
+  participants: many(meetingParticipants),
+}));
+
+export const meetingParticipantsRelations = relations(meetingParticipants, ({ one }) => ({
+  meeting: one(meetings, { fields: [meetingParticipants.meetingId], references: [meetings.id] }),
+  user: one(users, { fields: [meetingParticipants.userId], references: [users.id] }),
 }));
 
 // Insert schemas
@@ -241,6 +342,24 @@ export const insertSalaryAdvanceRequestSchema = createInsertSchema(salaryAdvance
   approvedBy: true,
 });
 
+export const insertChatRoomSchema = createInsertSchema(chatRooms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  isEdited: true,
+});
+
+export const insertMeetingSchema = createInsertSchema(meetings).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -256,3 +375,12 @@ export type TaskNote = typeof taskNotes.$inferSelect;
 export type TaskCollaborator = typeof taskCollaborators.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type Shift = typeof shifts.$inferSelect;
+export type ChatRoom = typeof chatRooms.$inferSelect;
+export type InsertChatRoom = z.infer<typeof insertChatRoomSchema>;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+export type ChatRoomMember = typeof chatRoomMembers.$inferSelect;
+export type MessageReaction = typeof messageReactions.$inferSelect;
+export type Meeting = typeof meetings.$inferSelect;
+export type InsertMeeting = z.infer<typeof insertMeetingSchema>;
+export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
