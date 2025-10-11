@@ -80,6 +80,8 @@ export default function Chat() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const activeCallRoomIdRef = useRef<string | null>(null);
   const { isConnected, lastMessage, sendMessage } = useWebSocket();
 
   const { data: rooms = [] } = useQuery<ChatRoom[]>({
@@ -244,6 +246,7 @@ export default function Chat() {
     if (!selectedRoom || selectedRoom.type !== 'private') return;
     
     try {
+      activeCallRoomIdRef.current = selectedRoom.id;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
       
@@ -255,19 +258,21 @@ export default function Chat() {
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
       
       pc.onicecandidate = (event) => {
-        if (event.candidate) {
+        if (event.candidate && activeCallRoomIdRef.current) {
           sendMessage({ 
             type: 'ice_candidate', 
-            roomId: selectedRoom.id, 
+            roomId: activeCallRoomIdRef.current, 
             candidate: event.candidate 
           });
         }
       };
 
       pc.ontrack = (event) => {
-        const audio = new Audio();
-        audio.srcObject = event.streams[0];
-        audio.play();
+        if (!remoteAudioRef.current) {
+          remoteAudioRef.current = new Audio();
+        }
+        remoteAudioRef.current.srcObject = event.streams[0];
+        remoteAudioRef.current.play();
       };
 
       const offer = await pc.createOffer();
@@ -275,7 +280,7 @@ export default function Chat() {
       
       sendMessage({ 
         type: 'call_offer', 
-        roomId: selectedRoom.id, 
+        roomId: activeCallRoomIdRef.current, 
         offer 
       });
       
@@ -286,15 +291,27 @@ export default function Chat() {
     }
   };
 
-  const endCall = () => {
+  const endCall = (sendEndSignal = true) => {
+    const callRoomId = activeCallRoomIdRef.current;
+    
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
     }
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
+      remoteAudioRef.current.srcObject = null;
     }
     setIsInCall(false);
-    sendMessage({ type: 'call_end', roomId: selectedRoom?.id });
+    activeCallRoomIdRef.current = null;
+    
+    if (sendEndSignal && callRoomId) {
+      sendMessage({ type: 'call_end', roomId: callRoomId });
+    }
   };
 
   const handleCreateRoom = () => {
@@ -334,6 +351,55 @@ export default function Chat() {
       setShowMentions(false);
     }
   }, [messageText]);
+
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    const handleCallMessage = async () => {
+      const pc = peerConnectionRef.current;
+      const activeRoomId = activeCallRoomIdRef.current;
+
+      if (lastMessage.type === 'call_offer') {
+        if (!activeRoomId) {
+          activeCallRoomIdRef.current = lastMessage.roomId;
+          const newPc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+          peerConnectionRef.current = newPc;
+          
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          localStreamRef.current = stream;
+          stream.getTracks().forEach(track => newPc.addTrack(track, stream));
+
+          newPc.onicecandidate = (event) => {
+            if (event.candidate && activeCallRoomIdRef.current) {
+              sendMessage({ type: 'ice_candidate', roomId: activeCallRoomIdRef.current, candidate: event.candidate });
+            }
+          };
+
+          newPc.ontrack = (event) => {
+            if (!remoteAudioRef.current) {
+              remoteAudioRef.current = new Audio();
+            }
+            remoteAudioRef.current.srcObject = event.streams[0];
+            remoteAudioRef.current.play();
+          };
+
+          await newPc.setRemoteDescription(new RTCSessionDescription(lastMessage.offer));
+          const answer = await newPc.createAnswer();
+          await newPc.setLocalDescription(answer);
+          sendMessage({ type: 'call_answer', roomId: lastMessage.roomId, answer });
+          setIsInCall(true);
+        }
+      } else if (lastMessage.type === 'call_answer' && pc && lastMessage.roomId === activeRoomId) {
+        await pc.setRemoteDescription(new RTCSessionDescription(lastMessage.answer));
+      } else if (lastMessage.type === 'ice_candidate' && pc && lastMessage.roomId === activeRoomId) {
+        await pc.addIceCandidate(new RTCIceCandidate(lastMessage.candidate));
+      } else if (lastMessage.type === 'call_end' && lastMessage.roomId === activeRoomId) {
+        endCall(false);
+      }
+    };
+
+    handleCallMessage().catch(console.error);
+  }, [lastMessage]);
 
   const getRoomName = (room: ChatRoom) => {
     if (room.type === 'group') return room.name || 'غرفة جماعية';
