@@ -24,6 +24,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -58,6 +68,7 @@ import {
   Phone,
   Briefcase,
   DollarSign,
+  Trash2,
 } from "lucide-react";
 
 const userFormSchema = z.object({
@@ -81,6 +92,7 @@ export default function UserManagement() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -184,6 +196,28 @@ export default function UserManagement() {
       toast({
         title: "خطأ",
         description: error.message || "حدث خطأ في تحديث حالة المستخدم",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/employees/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "تم بنجاح",
+        description: "تم حذف المستخدم بنجاح",
+      });
+      setUserToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "حدث خطأ في حذف المستخدم",
         variant: "destructive",
       });
     },
@@ -359,7 +393,7 @@ export default function UserManagement() {
                                 <FormItem>
                                   <FormLabel>كلمة المرور</FormLabel>
                                   <FormControl>
-                                    <Input {...field} type="password" placeholder="Employee@123" data-testid="input-password" />
+                                    <Input {...field} type="password" placeholder="كلمة المرور" data-testid="input-password" />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -542,16 +576,30 @@ export default function UserManagement() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditClick(user)}
-                                className="gap-2"
-                                data-testid={`button-edit-${user.id}`}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                                تعديل
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditClick(user)}
+                                  className="gap-2"
+                                  data-testid={`button-edit-${user.id}`}
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                  تعديل
+                                </Button>
+                                {currentUser?.role === 'admin' && currentUser.id !== user.id && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setUserToDelete(user)}
+                                    className="gap-2 text-destructive hover:text-destructive"
+                                    data-testid={`button-delete-${user.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    حذف
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -706,6 +754,28 @@ export default function UserManagement() {
                 </Form>
               </DialogContent>
             </Dialog>
+
+            <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>هل أنت متأكد من الحذف؟</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    سيتم حذف المستخدم "{userToDelete?.fullName}" نهائياً. لا يمكن التراجع عن هذا الإجراء.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-delete">إلغاء</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => userToDelete && deleteUserMutation.mutate(userToDelete.id)}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={deleteUserMutation.isPending}
+                    data-testid="button-confirm-delete"
+                  >
+                    {deleteUserMutation.isPending ? "جاري الحذف..." : "حذف"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </div>

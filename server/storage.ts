@@ -55,6 +55,7 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   updateUserLastLogin(id: string): Promise<void>;
   getUsers(): Promise<User[]>;
+  deleteUser(id: string): Promise<boolean>;
  
   // Tasks
   createTask(task: InsertTask): Promise<Task>;
@@ -177,6 +178,16 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     return await db.select().from(users).where(eq(users.isActive, true));
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    try {
+      const result = await db.delete(users).where(eq(users.id, id)).returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      return false;
+    }
   }
 
   // Tasks

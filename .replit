@@ -1,6 +1,7 @@
 modules = ["nodejs-20", "web"]
 [agent]
 expertMode = true
+integrations = ["google-calendar:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
@@ -31,7 +32,7 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 35001
+localPort = 35717
 externalPort = 3002
 
 [[ports]]

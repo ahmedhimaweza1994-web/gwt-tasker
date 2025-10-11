@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer } from "ws";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
+import { createGoogleMeetEvent } from "./google-calendar";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -418,6 +419,25 @@ export function registerRoutes(app: Express): Server {
       res.json(updatedEmployee);
     } catch (error) {
       res.status(500).json({ message: "حدث خطأ في تحديث بيانات الموظف" });
+    }
+  });
+
+  app.delete("/api/admin/employees/:id", requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+      // Prevent deleting yourself
+      if (req.params.id === req.user!.id) {
+        return res.status(400).json({ message: "لا يمكنك حذف حسابك الخاص" });
+      }
+
+      const success = await storage.deleteUser(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "المستخدم غير موجود" });
+      }
+      
+      res.json({ message: "تم حذف المستخدم بنجاح" });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "حدث خطأ في حذف المستخدم" });
     }
   });
 
@@ -998,16 +1018,34 @@ export function registerRoutes(app: Express): Server {
     try {
       const { title, participantIds } = req.body;
       
-      const meetingId = Math.random().toString(36).substring(2, 15);
-      const meetingLink = `https://meet.google.com/${meetingId}`;
+      // Create meeting with Google Calendar API to get proper Google Meet link
+      const startTime = new Date();
+      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour from now
+      
+      let meetingLink: string;
+      try {
+        const meetData = await createGoogleMeetEvent(
+          title,
+          `اجتماع مع ${participantIds.length} مشارك`,
+          startTime,
+          endTime
+        );
+        meetingLink = meetData.meetingLink!;
+      } catch (error) {
+        console.error("Failed to create Google Meet link:", error);
+        // Fallback: ask user to provide their own meeting link
+        return res.status(400).json({ 
+          message: "يرجى ربط حساب Google Calendar الخاص بك لإنشاء رابط Google Meet تلقائياً" 
+        });
+      }
       
       const meeting = await storage.createMeeting({
         title,
         description: `اجتماع مع ${participantIds.length} مشارك`,
         meetingLink,
         scheduledBy: req.user!.id,
-        startTime: new Date(),
-        endTime: null,
+        startTime,
+        endTime,
       });
       
       const allParticipantIds = [...participantIds, req.user!.id];

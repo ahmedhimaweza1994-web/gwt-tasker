@@ -627,7 +627,7 @@ export default function HRManagement() {
                       type="email"
                       value={newEmployee.email}
                       onChange={(e) => setNewEmployee({...newEmployee, email: e.target.value})}
-                      placeholder="email@example.com"
+                      placeholder="البريد الإلكتروني"
                       data-testid="input-employee-email"
                     />
                   </div>
@@ -637,7 +637,7 @@ export default function HRManagement() {
                       type="password"
                       value={newEmployee.password}
                       onChange={(e) => setNewEmployee({...newEmployee, password: e.target.value})}
-                      placeholder="Employee@123"
+                      placeholder="كلمة المرور"
                       data-testid="input-employee-password"
                     />
                   </div>

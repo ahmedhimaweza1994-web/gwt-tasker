@@ -153,7 +153,7 @@ export default function AuthPage() {
                       <Input
                         id="login-email"
                         type="email"
-                        placeholder="name@example.com"
+                        placeholder="البريد الإلكتروني"
                         value={loginForm.email}
                         onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                         required
@@ -212,7 +212,7 @@ export default function AuthPage() {
                       <Input
                         id="register-email"
                         type="email"
-                        placeholder="name@example.com"
+                        placeholder="البريد الإلكتروني"
                         value={registerForm.email}
                         onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
                         required
