@@ -47,6 +47,15 @@ export async function getUncachableGoogleCalendarClient() {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
+export async function checkGoogleCalendarConnection() {
+  try {
+    await getAccessToken();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 export async function createGoogleMeetEvent(title: string, description: string, startTime: Date, endTime: Date) {
   try {
     const calendar = await getUncachableGoogleCalendarClient();

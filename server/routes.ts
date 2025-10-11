@@ -1039,6 +1039,17 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Google Calendar Routes
+  app.get("/api/google-calendar/status", requireAuth, async (req, res) => {
+    try {
+      const { checkGoogleCalendarConnection } = await import("./google-calendar");
+      const isConnected = await checkGoogleCalendarConnection();
+      res.json({ connected: isConnected });
+    } catch (error) {
+      res.json({ connected: false });
+    }
+  });
+
   // Meetings Routes
   app.post("/api/meetings/schedule", requireAuth, async (req, res) => {
     try {
