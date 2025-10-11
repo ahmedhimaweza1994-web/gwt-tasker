@@ -13,6 +13,7 @@ import Reports from "@/pages/reports";
 import HRManagement from "@/pages/hr-management";
 import UserManagement from "@/pages/user-management";
 import Chat from "@/pages/chat";
+import MyRequests from "@/pages/my-requests";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -30,6 +31,7 @@ function Router() {
       <ProtectedRoute path="/hr" component={HRManagement} />
       <ProtectedRoute path="/user-management" component={UserManagement} />
       <ProtectedRoute path="/chat" component={Chat} />
+      <ProtectedRoute path="/my-requests" component={MyRequests} />
       <ProtectedRoute path="/settings" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>

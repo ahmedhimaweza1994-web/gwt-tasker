@@ -16,7 +16,8 @@ import {
   Clock,
   CheckCircle,
   Trophy,
-  Star
+  Star,
+  Trash2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -129,6 +130,30 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
     },
   });
 
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const res = await apiRequest("DELETE", `/api/tasks/${taskId}`, {});
+      if (!res.ok) throw new Error("Failed to delete task");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/assigned"] });
+      toast({
+        title: "تم حذف المهمة",
+        description: "تم حذف المهمة بنجاح",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في حذف المهمة",
+        description: error.message || "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAssignPoints = () => {
     if (!assignPointsDialog.taskId || !rewardPoints) return;
     const points = parseInt(rewardPoints);
@@ -141,6 +166,12 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
       return;
     }
     assignPointsMutation.mutate({ taskId: assignPointsDialog.taskId, rewardPoints: points });
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    if (window.confirm("هل أنت متأكد من حذف هذه المهمة؟ لا يمكن التراجع عن هذا الإجراء.")) {
+      deleteTaskMutation.mutate(taskId);
+    }
   };
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -196,6 +227,14 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleMoveTask(task.id, "completed")}>
                 نقل إلى: مكتمل
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleDeleteTask(task.id)} 
+                className="text-destructive focus:text-destructive"
+                data-testid="button-delete-task"
+              >
+                <Trash2 className="w-4 h-4 ml-2" />
+                حذف المهمة
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

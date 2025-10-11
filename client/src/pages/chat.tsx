@@ -9,7 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Send, MessageSquare, Users, Smile } from "lucide-react";
+import { 
+  Send, MessageSquare, Users, Smile, Paperclip, Mic, 
+  X, Reply, Image as ImageIcon, File, Download, AtSign 
+} from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -19,8 +22,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 
 interface User {
   id: string;
@@ -45,6 +54,7 @@ interface ChatMessage {
   reactions: any[];
   createdAt: string;
   attachments?: any[];
+  replyTo?: string;
 }
 
 export default function Chat() {
@@ -55,7 +65,15 @@ export default function Chat() {
   const [createRoomOpen, setCreateRoomOpen] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
+  const [mentionSearch, setMentionSearch] = useState("");
+  const [showMentions, setShowMentions] = useState(false);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   const { data: rooms = [] } = useQuery<ChatRoom[]>({
     queryKey: ["/api/chat/rooms"],
@@ -79,7 +97,11 @@ export default function Chat() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/messages", selectedRoom?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
       setMessageText("");
+      setReplyingTo(null);
+      setAttachments([]);
+      setRecordedAudio(null);
     },
   });
 
@@ -121,13 +143,93 @@ export default function Chat() {
     },
   });
 
-  const handleSendMessage = () => {
-    if (!messageText.trim() || !selectedRoom) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newAttachments = await Promise.all(
+      Array.from(files).map(async (file) => {
+        const reader = new FileReader();
+        return new Promise<any>((resolve) => {
+          reader.onloadend = () => {
+            resolve({
+              name: file.name,
+              type: file.type.startsWith("image/") ? "image" : "file",
+              url: reader.result as string,
+              size: file.size,
+            });
+          };
+          reader.readAsDataURL(file);
+        });
+      })
+    );
+
+    setAttachments([...attachments, ...newAttachments]);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      const chunks: Blob[] = [];
+
+      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        setRecordedAudio(blob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      toast({
+        title: "خطأ",
+        description: "لا يمكن الوصول إلى الميكروفون",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!selectedRoom) return;
+    
+    let content = messageText.trim();
+    let messageType = "text";
+    let messageAttachments = attachments;
+
+    if (recordedAudio) {
+      const reader = new FileReader();
+      const audioDataUrl = await new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(recordedAudio);
+      });
+
+      messageAttachments = [{
+        name: "تسجيل صوتي",
+        type: "audio",
+        url: audioDataUrl,
+      }];
+      messageType = "file";
+      content = "🎤 تسجيل صوتي";
+    }
+
+    if (!content && messageAttachments.length === 0) return;
 
     sendMessageMutation.mutate({
       roomId: selectedRoom.id,
-      content: messageText,
-      messageType: "text",
+      content: content || (messageAttachments.length > 0 ? "📎 مرفق" : ""),
+      messageType: messageAttachments.length > 0 ? "file" : messageType,
+      attachments: messageAttachments,
+      replyTo: replyingTo?.id,
     });
   };
 
@@ -148,9 +250,26 @@ export default function Chat() {
     });
   };
 
+  const insertMention = (userName: string) => {
+    const newText = messageText + `@${userName} `;
+    setMessageText(newText);
+    setShowMentions(false);
+    setMentionSearch("");
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const lastWord = messageText.split(" ").pop() || "";
+    if (lastWord.startsWith("@") && lastWord.length > 1) {
+      setMentionSearch(lastWord.slice(1));
+      setShowMentions(true);
+    } else {
+      setShowMentions(false);
+    }
+  }, [messageText]);
 
   const getRoomName = (room: ChatRoom) => {
     if (room.type === 'group') return room.name || 'غرفة جماعية';
@@ -158,7 +277,23 @@ export default function Chat() {
     return otherMember?.fullName || 'دردشة خاصة';
   };
 
-  const reactions = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
+  const getReplyMessage = (replyId?: string) => {
+    return messages.find(m => m.id === replyId);
+  };
+
+  const reactions = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '✨'];
+
+  const sortedRooms = [...rooms].sort((a, b) => {
+    if (a.name === 'الغرفة العامة') return -1;
+    if (b.name === 'الغرفة العامة') return 1;
+    return 0;
+  });
+
+  const filteredUsers = users
+    .filter((u) => 
+      u.id !== user?.id && 
+      u.fullName.toLowerCase().includes(mentionSearch.toLowerCase())
+    );
 
   return (
     <div className="min-h-screen bg-background">
@@ -228,7 +363,7 @@ export default function Chat() {
               <Input placeholder="بحث..." data-testid="input-search-chat" />
             </div>
             <ScrollArea className="h-[calc(100vh-200px)]">
-              {rooms.map((room) => (
+              {sortedRooms.map((room) => (
                 <div
                   key={room.id}
                   onClick={() => setSelectedRoom(room)}
@@ -244,7 +379,12 @@ export default function Chat() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <p className="font-medium">{getRoomName(room)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{getRoomName(room)}</p>
+                        {room.name === 'الغرفة العامة' && (
+                          <Badge variant="secondary" className="text-xs">عامة</Badge>
+                        )}
+                      </div>
                       {room.lastMessage && (
                         <p className="text-sm text-muted-foreground truncate">
                           {room.lastMessage.content}
@@ -288,79 +428,234 @@ export default function Chat() {
 
                 <ScrollArea className="flex-1 p-4">
                   <div className="space-y-4">
-                    {messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`flex ${msg.senderId === user?.id ? 'justify-end' : 'justify-start'}`}
-                        data-testid={`message-${msg.id}`}
-                      >
-                        <div className={`max-w-[70%] ${msg.senderId === user?.id ? 'items-end' : 'items-start'} flex flex-col`}>
-                          {msg.senderId !== user?.id && (
-                            <p className="text-xs text-muted-foreground mb-1">
-                              {msg.sender.fullName}
-                            </p>
-                          )}
-                          <div
-                            className={`rounded-lg p-3 ${
-                              msg.senderId === user?.id
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted'
-                            }`}
-                          >
-                            {msg.messageType === 'meeting_link' && msg.attachments?.[0] ? (
-                              <div>
-                                <p className="font-medium mb-2">{msg.content}</p>
-                                <a
-                                  href={msg.attachments[0].url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-sm underline"
-                                >
-                                  انضم للاجتماع
-                                </a>
+                    {messages.map((msg) => {
+                      const replyMsg = getReplyMessage(msg.replyTo);
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex ${msg.senderId === user?.id ? 'justify-end' : 'justify-start'}`}
+                          data-testid={`message-${msg.id}`}
+                        >
+                          <div className={`max-w-[70%] ${msg.senderId === user?.id ? 'items-end' : 'items-start'} flex flex-col`}>
+                            {msg.senderId !== user?.id && (
+                              <p className="text-xs text-muted-foreground mb-1">
+                                {msg.sender.fullName}
+                              </p>
+                            )}
+                            <div
+                              className={`rounded-lg p-3 ${
+                                msg.senderId === user?.id
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-muted'
+                              }`}
+                            >
+                              {replyMsg && (
+                                <div className="bg-black/10 dark:bg-white/10 rounded p-2 mb-2 text-xs">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Reply className="w-3 h-3" />
+                                    <span className="font-medium">{replyMsg.sender.fullName}</span>
+                                  </div>
+                                  <p className="truncate opacity-75">{replyMsg.content}</p>
+                                </div>
+                              )}
+                              
+                              {msg.attachments && msg.attachments.length > 0 ? (
+                                <div className="space-y-2">
+                                  {msg.attachments.map((att, idx) => (
+                                    <div key={idx}>
+                                      {att.type === 'image' ? (
+                                        <img src={att.url} alt={att.name} className="max-w-full rounded" />
+                                      ) : att.type === 'audio' ? (
+                                        <audio controls src={att.url} className="max-w-full" />
+                                      ) : (
+                                        <div className="flex items-center gap-2 p-2 bg-black/10 dark:bg-white/10 rounded">
+                                          <File className="w-4 h-4" />
+                                          <span className="text-sm flex-1">{att.name}</span>
+                                          <a 
+                                            href={att.url} 
+                                            download={att.name}
+                                            className="inline-flex"
+                                          >
+                                            <Button size="sm" variant="ghost">
+                                              <Download className="w-4 h-4" />
+                                            </Button>
+                                          </a>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                  {msg.content && msg.content !== "📎 مرفق" && msg.content !== "🎤 تسجيل صوتي" && (
+                                    <p className="mt-2">{msg.content}</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p>{msg.content}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-1 mt-1 items-center">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setReplyingTo(msg)}
+                                className="h-6 px-2"
+                                data-testid={`reply-${msg.id}`}
+                              >
+                                <Reply className="w-3 h-3" />
+                              </Button>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button size="sm" variant="ghost" className="h-6 px-2">
+                                    <Smile className="w-3 h-3" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-2">
+                                  <div className="flex gap-1">
+                                    {reactions.map((emoji) => (
+                                      <button
+                                        key={emoji}
+                                        onClick={() => addReactionMutation.mutate({ messageId: msg.id, emoji })}
+                                        className="text-lg hover:bg-muted p-1 rounded"
+                                        data-testid={`reaction-${emoji}-${msg.id}`}
+                                      >
+                                        {emoji}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            {msg.reactions.length > 0 && (
+                              <div className="flex gap-1 mt-1">
+                                {msg.reactions.map((reaction, idx) => (
+                                  <span key={idx} className="text-xs bg-muted px-2 py-1 rounded">
+                                    {reaction.emoji}
+                                  </span>
+                                ))}
                               </div>
-                            ) : (
-                              <p>{msg.content}</p>
                             )}
                           </div>
-                          <div className="flex gap-1 mt-1">
-                            {reactions.map((emoji) => (
-                              <button
-                                key={emoji}
-                                onClick={() => addReactionMutation.mutate({ messageId: msg.id, emoji })}
-                                className="text-xs hover:bg-muted p-1 rounded"
-                                data-testid={`reaction-${emoji}-${msg.id}`}
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                          {msg.reactions.length > 0 && (
-                            <div className="flex gap-1 mt-1">
-                              {msg.reactions.map((reaction, idx) => (
-                                <span key={idx} className="text-xs bg-muted px-2 py-1 rounded">
-                                  {reaction.emoji}
-                                </span>
-                              ))}
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                 </ScrollArea>
 
                 <div className="p-4 border-t border-border bg-card">
+                  {replyingTo && (
+                    <div className="bg-muted rounded p-2 mb-2 flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1 mb-1">
+                          <Reply className="w-3 h-3" />
+                          <span className="text-xs font-medium">{replyingTo.sender.fullName}</span>
+                        </div>
+                        <p className="text-sm truncate">{replyingTo.content}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setReplyingTo(null)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {attachments.length > 0 && (
+                    <div className="flex gap-2 mb-2 flex-wrap">
+                      {attachments.map((att, idx) => (
+                        <div key={idx} className="relative">
+                          {att.type === 'image' ? (
+                            <img src={att.url} alt={att.name} className="h-20 rounded" />
+                          ) : (
+                            <div className="flex items-center gap-2 bg-muted p-2 rounded">
+                              <File className="w-4 h-4" />
+                              <span className="text-xs">{att.name}</span>
+                            </div>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="absolute -top-2 -left-2 h-5 w-5 p-0 rounded-full"
+                            onClick={() => setAttachments(attachments.filter((_, i) => i !== idx))}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {recordedAudio && (
+                    <div className="bg-muted rounded p-2 mb-2 flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Mic className="w-4 h-4" />
+                        <span className="text-sm">🎤 تسجيل صوتي جاهز للإرسال</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setRecordedAudio(null)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {showMentions && filteredUsers.length > 0 && (
+                    <div className="bg-card border rounded-md mb-2 max-h-32 overflow-auto">
+                      {filteredUsers.map((u) => (
+                        <button
+                          key={u.id}
+                          onClick={() => insertMention(u.fullName)}
+                          className="w-full text-right p-2 hover:bg-muted flex items-center gap-2"
+                        >
+                          <AtSign className="w-3 h-3" />
+                          <span className="text-sm">{u.fullName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,application/*"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      data-testid="button-attach-file"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      className={isRecording ? "bg-red-500 text-white" : ""}
+                      data-testid="button-record-audio"
+                    >
+                      <Mic className="w-4 h-4" />
+                    </Button>
                     <Input
                       value={messageText}
                       onChange={(e) => setMessageText(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                      placeholder="اكتب رسالة..."
+                      onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                      placeholder="اكتب رسالة... (@للإشارة)"
                       data-testid="input-message"
+                      className="flex-1"
                     />
-                    <Button onClick={handleSendMessage} disabled={!messageText.trim()} data-testid="button-send-message">
+                    <Button 
+                      onClick={handleSendMessage} 
+                      disabled={!messageText.trim() && !recordedAudio && attachments.length === 0} 
+                      data-testid="button-send-message"
+                    >
                       <Send className="w-4 h-4" />
                     </Button>
                   </div>

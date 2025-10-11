@@ -16,7 +16,8 @@ import {
   Building,
   FileText,
   UserCog,
-  MessageSquare
+  MessageSquare,
+  DollarSign
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,12 @@ export default function Sidebar() {
       name: "الدردشة",
       href: "/chat",
       icon: MessageSquare,
+      badge: null,
+    },
+    {
+      name: "طلباتي",
+      href: "/my-requests",
+      icon: DollarSign,
       badge: null,
     },
     {

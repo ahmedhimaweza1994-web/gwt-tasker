@@ -496,6 +496,15 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.get("/api/leaves/my", requireAuth, async (req, res) => {
+    try {
+      const requests = await storage.getUserLeaveRequests(req.user!.id);
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب طلبات الإجازات" });
+    }
+  });
+
   app.get("/api/leaves/pending", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
     try {
       const requests = await storage.getPendingLeaveRequests();
@@ -809,6 +818,7 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/chat/rooms", requireAuth, async (req, res) => {
     try {
+      await storage.ensureUserInCommonRoom(req.user!.id);
       const rooms = await storage.getUserChatRooms(req.user!.id);
       res.json(rooms);
     } catch (error) {

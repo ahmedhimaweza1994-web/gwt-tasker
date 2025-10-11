@@ -693,7 +693,7 @@ export class DatabaseStorage implements IStorage {
     return chatRoom;
   }
 
-  async getOrCreatePrivateChat(user1Id: string, user2Id: string): Promise<ChatRoom> {
+  async getOrCreatePrivateChat(user1Id: string, user2Id: string): Promise<ChatRoom & { members: User[] }> {
     const existingRooms = await db
       .select({
         room: chatRooms,
@@ -712,21 +712,87 @@ export class DatabaseStorage implements IStorage {
       .groupBy(chatRooms.id)
       .having(sql`COUNT(DISTINCT ${chatRoomMembers.userId}) = 2`);
 
+    let roomId: string;
     if (existingRooms.length > 0) {
-      return existingRooms[0].room;
+      roomId = existingRooms[0].room.id;
+    } else {
+      const [newRoom] = await db.insert(chatRooms).values({
+        type: 'private',
+        createdBy: user1Id,
+      }).returning();
+      roomId = newRoom.id;
+
+      await db.insert(chatRoomMembers).values([
+        { roomId: newRoom.id, userId: user1Id },
+        { roomId: newRoom.id, userId: user2Id },
+      ]);
     }
 
-    const [newRoom] = await db.insert(chatRooms).values({
-      type: 'private',
-      createdBy: user1Id,
+    const [room] = await db.select().from(chatRooms).where(eq(chatRooms.id, roomId));
+    const members = await db
+      .select({ user: users })
+      .from(chatRoomMembers)
+      .innerJoin(users, eq(chatRoomMembers.userId, users.id))
+      .where(eq(chatRoomMembers.roomId, roomId));
+
+    return {
+      ...room,
+      members: members.map(m => m.user),
+    };
+  }
+
+  async getOrCreateCommonRoom(): Promise<ChatRoom> {
+    const [existingRoom] = await db
+      .select()
+      .from(chatRooms)
+      .where(and(
+        eq(chatRooms.type, 'group'),
+        eq(chatRooms.name, 'الغرفة العامة')
+      ))
+      .limit(1);
+
+    if (existingRoom) {
+      return existingRoom;
+    }
+
+    const [firstUser] = await db.select().from(users).limit(1);
+    const [commonRoom] = await db.insert(chatRooms).values({
+      name: 'الغرفة العامة',
+      type: 'group',
+      createdBy: firstUser?.id || sql`gen_random_uuid()`,
     }).returning();
 
-    await db.insert(chatRoomMembers).values([
-      { roomId: newRoom.id, userId: user1Id },
-      { roomId: newRoom.id, userId: user2Id },
-    ]);
+    const allUsers = await db.select().from(users);
+    const memberValues = allUsers.map(user => ({
+      roomId: commonRoom.id,
+      userId: user.id,
+    }));
 
-    return newRoom;
+    if (memberValues.length > 0) {
+      await db.insert(chatRoomMembers).values(memberValues);
+    }
+
+    return commonRoom;
+  }
+
+  async ensureUserInCommonRoom(userId: string): Promise<void> {
+    const commonRoom = await this.getOrCreateCommonRoom();
+    
+    const [existing] = await db
+      .select()
+      .from(chatRoomMembers)
+      .where(and(
+        eq(chatRoomMembers.roomId, commonRoom.id),
+        eq(chatRoomMembers.userId, userId)
+      ))
+      .limit(1);
+
+    if (!existing) {
+      await db.insert(chatRoomMembers).values({
+        roomId: commonRoom.id,
+        userId: userId,
+      });
+    }
   }
 
   async getUserChatRooms(userId: string): Promise<(ChatRoom & { members: User[], lastMessage?: ChatMessage })[]> {
