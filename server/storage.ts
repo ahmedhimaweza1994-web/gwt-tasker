@@ -9,6 +9,12 @@ import {
   taskCollaborators,
   notifications,
   shifts,
+  chatRooms,
+  chatRoomMembers,
+  chatMessages,
+  messageReactions,
+  meetings,
+  meetingParticipants,
   type User,
   type InsertUser,
   type Task,
@@ -22,6 +28,15 @@ import {
   type TaskNote,
   type Notification,
   type Shift,
+  type ChatRoom,
+  type InsertChatRoom,
+  type ChatMessage,
+  type InsertChatMessage,
+  type ChatRoomMember,
+  type MessageReaction,
+  type Meeting,
+  type InsertMeeting,
+  type MeetingParticipant,
   advanceStatusEnum
 } from "@shared/schema";
 import { db } from "./db";
@@ -94,6 +109,29 @@ export interface IStorage {
   getSystemStats(): Promise<any>;
  
   sessionStore: session.Store;
+  // Chat Rooms
+  createChatRoom(room: InsertChatRoom): Promise<ChatRoom>;
+  getOrCreatePrivateChat(user1Id: string, user2Id: string): Promise<ChatRoom>;
+  getUserChatRooms(userId: string): Promise<(ChatRoom & { members: User[], lastMessage?: ChatMessage })[]>;
+  getChatRoom(roomId: string): Promise<ChatRoom | undefined>;
+  addChatRoomMember(roomId: string, userId: string): Promise<void>;
+
+  // Chat Messages
+  createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
+  getChatMessages(roomId: string, limit?: number): Promise<(ChatMessage & { sender: User, reactions: MessageReaction[] })[]>;
+  updateChatMessage(messageId: string, content: string): Promise<ChatMessage | undefined>;
+  deleteChatMessage(messageId: string): Promise<boolean>;
+
+  // Message Reactions
+  addMessageReaction(messageId: string, userId: string, emoji: string): Promise<MessageReaction>;
+  removeMessageReaction(messageId: string, userId: string, emoji: string): Promise<void>;
+
+  // Meetings
+  createMeeting(meeting: InsertMeeting): Promise<Meeting>;
+  addMeetingParticipant(meetingId: string, userId: string): Promise<void>;
+  getUserMeetings(userId: string): Promise<Meeting[]>;
+  getMeeting(meetingId: string): Promise<(Meeting & { participants: User[] }) | undefined>;
+
 }
 
 export class DatabaseStorage implements IStorage {
@@ -649,6 +687,211 @@ export class DatabaseStorage implements IStorage {
    
     return stats;
   }
+  // Chat Rooms
+  async createChatRoom(room: InsertChatRoom): Promise<ChatRoom> {
+    const [chatRoom] = await db.insert(chatRooms).values(room).returning();
+    return chatRoom;
+  }
+
+  async getOrCreatePrivateChat(user1Id: string, user2Id: string): Promise<ChatRoom> {
+    const existingRooms = await db
+      .select({
+        room: chatRooms,
+      })
+      .from(chatRooms)
+      .innerJoin(chatRoomMembers, eq(chatRooms.id, chatRoomMembers.roomId))
+      .where(
+        and(
+          eq(chatRooms.type, 'private'),
+          or(
+            eq(chatRoomMembers.userId, user1Id),
+            eq(chatRoomMembers.userId, user2Id)
+          )
+        )
+      )
+      .groupBy(chatRooms.id)
+      .having(sql`COUNT(DISTINCT ${chatRoomMembers.userId}) = 2`);
+
+    if (existingRooms.length > 0) {
+      return existingRooms[0].room;
+    }
+
+    const [newRoom] = await db.insert(chatRooms).values({
+      type: 'private',
+      createdBy: user1Id,
+    }).returning();
+
+    await db.insert(chatRoomMembers).values([
+      { roomId: newRoom.id, userId: user1Id },
+      { roomId: newRoom.id, userId: user2Id },
+    ]);
+
+    return newRoom;
+  }
+
+  async getUserChatRooms(userId: string): Promise<(ChatRoom & { members: User[], lastMessage?: ChatMessage })[]> {
+    const rooms = await db
+      .select({
+        room: chatRooms,
+      })
+      .from(chatRoomMembers)
+      .innerJoin(chatRooms, eq(chatRoomMembers.roomId, chatRooms.id))
+      .where(eq(chatRoomMembers.userId, userId))
+      .orderBy(desc(chatRooms.updatedAt));
+
+    const result = [];
+    for (const { room } of rooms) {
+      const members = await db
+        .select({ user: users })
+        .from(chatRoomMembers)
+        .innerJoin(users, eq(chatRoomMembers.userId, users.id))
+        .where(eq(chatRoomMembers.roomId, room.id));
+
+      const [lastMessage] = await db
+        .select()
+        .from(chatMessages)
+        .where(eq(chatMessages.roomId, room.id))
+        .orderBy(desc(chatMessages.createdAt))
+        .limit(1);
+
+      result.push({
+        ...room,
+        members: members.map(m => m.user),
+        lastMessage,
+      });
+    }
+
+    return result;
+  }
+
+  async getChatRoom(roomId: string): Promise<ChatRoom | undefined> {
+    const [room] = await db.select().from(chatRooms).where(eq(chatRooms.id, roomId));
+    return room || undefined;
+  }
+
+  async addChatRoomMember(roomId: string, userId: string): Promise<void> {
+    await db.insert(chatRoomMembers).values({ roomId, userId });
+  }
+
+  // Chat Messages
+  async createChatMessage(message: InsertChatMessage): Promise<ChatMessage> {
+    const messageData = {
+      roomId: message.roomId,
+      senderId: message.senderId,
+      content: message.content || null,
+      messageType: message.messageType || 'text',
+      attachments: message.attachments || null,
+      replyTo: message.replyTo || null,
+    } as typeof chatMessages.$inferInsert;
+    const [chatMessage] = await db.insert(chatMessages).values(messageData).returning();
+    
+    await db
+      .update(chatRooms)
+      .set({ updatedAt: new Date() })
+      .where(eq(chatRooms.id, message.roomId));
+
+    return chatMessage;
+  }
+
+  async getChatMessages(roomId: string, limit: number = 50): Promise<(ChatMessage & { sender: User, reactions: MessageReaction[] })[]> {
+    const messages = await db
+      .select({
+        message: chatMessages,
+        sender: users,
+      })
+      .from(chatMessages)
+      .innerJoin(users, eq(chatMessages.senderId, users.id))
+      .where(eq(chatMessages.roomId, roomId))
+      .orderBy(desc(chatMessages.createdAt))
+      .limit(limit);
+
+    const result = [];
+    for (const { message, sender } of messages) {
+      const reactions = await db
+        .select()
+        .from(messageReactions)
+        .where(eq(messageReactions.messageId, message.id));
+
+      result.push({
+        ...message,
+        sender,
+        reactions,
+      });
+    }
+
+    return result.reverse();
+  }
+
+  async updateChatMessage(messageId: string, content: string): Promise<ChatMessage | undefined> {
+    const [message] = await db
+      .update(chatMessages)
+      .set({ content, isEdited: true, updatedAt: new Date() })
+      .where(eq(chatMessages.id, messageId))
+      .returning();
+    return message || undefined;
+  }
+
+  async deleteChatMessage(messageId: string): Promise<boolean> {
+    const result = await db.delete(chatMessages).where(eq(chatMessages.id, messageId));
+    return result.rowCount! > 0;
+  }
+
+  // Message Reactions
+  async addMessageReaction(messageId: string, userId: string, emoji: string): Promise<MessageReaction> {
+    const [reaction] = await db
+      .insert(messageReactions)
+      .values({ messageId, userId, emoji })
+      .returning();
+    return reaction;
+  }
+
+  async removeMessageReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+    await db
+      .delete(messageReactions)
+      .where(and(
+        eq(messageReactions.messageId, messageId),
+        eq(messageReactions.userId, userId),
+        eq(messageReactions.emoji, emoji)
+      ));
+  }
+
+  // Meetings
+  async createMeeting(meeting: InsertMeeting): Promise<Meeting> {
+    const [newMeeting] = await db.insert(meetings).values(meeting).returning();
+    return newMeeting;
+  }
+
+  async addMeetingParticipant(meetingId: string, userId: string): Promise<void> {
+    await db.insert(meetingParticipants).values({ meetingId, userId });
+  }
+
+  async getUserMeetings(userId: string): Promise<Meeting[]> {
+    const result = await db
+      .select({ meeting: meetings })
+      .from(meetingParticipants)
+      .innerJoin(meetings, eq(meetingParticipants.meetingId, meetings.id))
+      .where(eq(meetingParticipants.userId, userId))
+      .orderBy(desc(meetings.startTime));
+
+    return result.map(r => r.meeting);
+  }
+
+  async getMeeting(meetingId: string): Promise<(Meeting & { participants: User[] }) | undefined> {
+    const [meeting] = await db.select().from(meetings).where(eq(meetings.id, meetingId));
+    if (!meeting) return undefined;
+
+    const participants = await db
+      .select({ user: users })
+      .from(meetingParticipants)
+      .innerJoin(users, eq(meetingParticipants.userId, users.id))
+      .where(eq(meetingParticipants.meetingId, meetingId));
+
+    return {
+      ...meeting,
+      participants: participants.map(p => p.user),
+    };
+  }
 }
 
 export const storage = new DatabaseStorage();
+
