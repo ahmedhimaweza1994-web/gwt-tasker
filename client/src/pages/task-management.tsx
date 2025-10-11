@@ -15,6 +15,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Plus, Search, Filter } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Task, User } from "@shared/schema";
 
 export default function TaskManagement() {
   const { user } = useAuth();
@@ -37,20 +38,20 @@ export default function TaskManagement() {
   const [departmentFilter, setDepartmentFilter] = useState("all"); // فلتر القسم
 
   // Fetch tasks (للـ admin: كل المهام، لغير admin: مهامي ومعينة لي)
-  const { data: tasks = [] } = useQuery({
+  const { data: tasks = [] } = useQuery<Task[]>({
     queryKey: ["/api/tasks"],
     enabled: user?.role === 'admin' || user?.role === 'sub-admin',
   });
-  const { data: myTasks = [] } = useQuery({
+  const { data: myTasks = [] } = useQuery<Task[]>({
     queryKey: ["/api/tasks/my"],
     enabled: user?.role !== 'admin' && user?.role !== 'sub-admin',
   });
-  const { data: assignedTasks = [] } = useQuery({
+  const { data: assignedTasks = [] } = useQuery<Task[]>({
     queryKey: ["/api/tasks/assigned"],
     enabled: user?.role !== 'admin' && user?.role !== 'sub-admin',
   });
   // Fetch users for assignment and filtering
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
   // Create task mutation
@@ -116,6 +117,7 @@ export default function TaskManagement() {
   });
   const pendingTasks = filteredTasks.filter(task => task.status === 'pending');
   const inProgressTasks = filteredTasks.filter(task => task.status === 'in_progress');
+  const underReviewTasks = filteredTasks.filter(task => task.status === 'under_review');
   const completedTasks = filteredTasks.filter(task => task.status === 'completed');
   const handleResetFilters = () => {
     setSearchTerm("");
@@ -369,6 +371,7 @@ export default function TaskManagement() {
           <TaskKanban
             pendingTasks={pendingTasks}
             inProgressTasks={inProgressTasks}
+            underReviewTasks={underReviewTasks}
             completedTasks={completedTasks}
           />
         </main>

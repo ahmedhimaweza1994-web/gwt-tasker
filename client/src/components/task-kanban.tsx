@@ -11,7 +11,8 @@ import {
   MessageSquare,
   Plus,
   AlertCircle,
-  Clock
+  Clock,
+  CheckCircle
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -21,14 +22,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { Task } from "@shared/schema";
 interface TaskKanbanProps {
   pendingTasks: Task[];
   inProgressTasks: Task[];
+  underReviewTasks: Task[];
   completedTasks: Task[];
 }
-export default function TaskKanban({ pendingTasks, inProgressTasks, completedTasks }: TaskKanbanProps) {
+export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewTasks, completedTasks }: TaskKanbanProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   // Update task status mutation
   const updateTaskMutation = useMutation({
     mutationFn: async (data: { taskId: string; status: string }) => {
@@ -52,8 +56,36 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, completedTas
       });
     },
   });
+  // Approve task review mutation
+  const approveTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const res = await apiRequest("PUT", `/api/tasks/${taskId}/approve-review`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/assigned"] });
+      toast({
+        title: "تمت الموافقة على المهمة",
+        description: "تم إكمال المهمة بنجاح",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في الموافقة على المهمة",
+        description: error.message || "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleMoveTask = (taskId: string, newStatus: string) => {
     updateTaskMutation.mutate({ taskId, status: newStatus });
+  };
+
+  const handleApproveTask = (taskId: string) => {
+    approveTaskMutation.mutate(taskId);
   };
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -71,9 +103,9 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, completedTas
       default: return priority;
     }
   };
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null;
-    const date = new Date(dateString);
+  const formatDate = (dateInput?: string | Date | null) => {
+    if (!dateInput) return null;
+    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
     const now = new Date();
     const diffTime = date.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -102,6 +134,9 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, completedTas
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleMoveTask(task.id, "in_progress")}>
                 نقل إلى: قيد التنفيذ
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleMoveTask(task.id, "under_review")}>
+                نقل إلى: تحت المراجعة
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleMoveTask(task.id, "completed")}>
                 نقل إلى: مكتمل
@@ -160,7 +195,7 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, completedTas
     </Card>
   );
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6" data-testid="kanban-board">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-testid="kanban-board">
       {/* Pending Column */}
       <div className="space-y-4">
         <Card>
@@ -222,6 +257,51 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, completedTas
               </Button>
             </CardContent>
           </Card>
+        </div>
+      </div>
+      {/* Under Review Column */}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <div className="w-3 h-3 rounded-full bg-warning"></div>
+                تحت المراجعة
+              </CardTitle>
+              <Badge variant="secondary" className="text-xs">
+                {underReviewTasks.length}
+              </Badge>
+            </div>
+          </CardHeader>
+        </Card>
+        <div className="space-y-3" data-testid="kanban-review-column">
+          {underReviewTasks.map((task) => {
+            const canApprove = user && (
+              user.role === 'admin' || 
+              user.role === 'sub-admin' || 
+              task.createdBy === user.id
+            );
+            
+            return (
+              <div key={task.id} className="relative">
+                <div className="absolute right-0 top-0 bottom-0 w-1 bg-warning rounded-full"></div>
+                <TaskCard task={task} status="under_review" />
+                {canApprove && (
+                  <Button
+                    onClick={() => handleApproveTask(task.id)}
+                    disabled={approveTaskMutation.isPending}
+                    className="w-full mt-2"
+                    size="sm"
+                    variant="default"
+                    data-testid={`button-approve-task-${task.id}`}
+                  >
+                    <CheckCircle className="w-4 h-4 ml-2" />
+                    {approveTaskMutation.isPending ? "جاري الموافقة..." : "الموافقة وإكمال المهمة"}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
       {/* Completed Column */}
