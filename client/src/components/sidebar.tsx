@@ -17,8 +17,10 @@ import {
   FileText,
   UserCog,
   MessageSquare,
-  DollarSign
+  DollarSign,
+  AlertCircle
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -67,6 +69,12 @@ export default function Sidebar() {
   const { data: allUsers = [], isLoading: isLoadingUsers } = useQuery<Pick<User, 'id' | 'fullName' | 'email' | 'department' | 'jobTitle' | 'profilePicture'>[]>({
     queryKey: ["/api/users"],
     enabled: !!user,
+  });
+
+  // Check Google Calendar connection status
+  const { data: calendarStatus, isLoading: isLoadingCalendarStatus } = useQuery<{ connected: boolean }>({
+    queryKey: ["/api/google-calendar/status"],
+    enabled: !!user && showMeetingDialog,
   });
 
   const totalTasks = [...userTasks, ...assignedTasks].filter(t => t.status !== 'completed').length;
@@ -330,6 +338,39 @@ export default function Sidebar() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
+            {/* Google Calendar Connection Status */}
+            {isLoadingCalendarStatus ? (
+              <Alert data-testid="alert-calendar-loading">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-right">
+                  جاري التحقق من اتصال Google Calendar...
+                </AlertDescription>
+              </Alert>
+            ) : calendarStatus && !calendarStatus.connected ? (
+              <Alert variant="destructive" data-testid="alert-calendar-disconnected">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-right space-y-2">
+                  <p className="font-semibold">Google Calendar غير متصل</p>
+                  <p className="text-sm">
+                    لجدولة اجتماعات Google Meet، يرجى ربط حساب Google Calendar الخاص بك:
+                  </p>
+                  <ol className="text-sm list-decimal list-inside space-y-1 mr-4">
+                    <li>انقر على "Tools" في القائمة اليسرى</li>
+                    <li>ابحث عن "Google Calendar" واختر "Connect"</li>
+                    <li>اتبع التعليمات لربط حسابك</li>
+                    <li>عد إلى هنا وحاول مرة أخرى</li>
+                  </ol>
+                </AlertDescription>
+              </Alert>
+            ) : calendarStatus?.connected ? (
+              <Alert className="bg-success/10 border-success text-success" data-testid="alert-calendar-connected">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-right">
+                  ✓ Google Calendar متصل - سيتم إنشاء رابط Google Meet تلقائياً
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="meeting-title" className="text-right">عنوان الاجتماع</Label>
               <Input
