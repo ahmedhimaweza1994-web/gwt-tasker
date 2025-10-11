@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, decimal, uuid, pgEnum, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, decimal, uuid, pgEnum, jsonb, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -187,7 +187,10 @@ export const messageReactions = pgTable("message_reactions", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   emoji: text("emoji").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint: one reaction per user per message
+  uniqueUserMessageReaction: unique().on(table.messageId, table.userId),
+}));
 
 // Meetings
 export const meetings = pgTable("meetings", {

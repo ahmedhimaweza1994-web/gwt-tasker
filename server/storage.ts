@@ -124,7 +124,7 @@ export interface IStorage {
   deleteChatMessage(messageId: string): Promise<boolean>;
 
   // Message Reactions
-  addMessageReaction(messageId: string, userId: string, emoji: string): Promise<MessageReaction>;
+  addMessageReaction(messageId: string, userId: string, emoji: string): Promise<MessageReaction & { action: 'added' | 'removed' | 'switched' }>;
   removeMessageReaction(messageId: string, userId: string, emoji: string): Promise<void>;
 
   // Meetings
@@ -914,12 +914,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Message Reactions
-  async addMessageReaction(messageId: string, userId: string, emoji: string): Promise<MessageReaction> {
+  async addMessageReaction(messageId: string, userId: string, emoji: string): Promise<MessageReaction & { action: 'added' | 'removed' | 'switched' }> {
+    // Check if user already has a reaction on this message
+    const existing = await db
+      .select()
+      .from(messageReactions)
+      .where(and(
+        eq(messageReactions.messageId, messageId),
+        eq(messageReactions.userId, userId)
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      // If same emoji, remove it (toggle off)
+      if (existing[0].emoji === emoji) {
+        await db
+          .delete(messageReactions)
+          .where(eq(messageReactions.id, existing[0].id));
+        return { ...existing[0], action: 'removed' };
+      }
+      // If different emoji, update to new one (switch)
+      const [updated] = await db
+        .update(messageReactions)
+        .set({ emoji, createdAt: new Date() })
+        .where(eq(messageReactions.id, existing[0].id))
+        .returning();
+      return { ...updated, action: 'switched' };
+    }
+
+    // No existing reaction, create new one
     const [reaction] = await db
       .insert(messageReactions)
       .values({ messageId, userId, emoji })
       .returning();
-    return reaction;
+    return { ...reaction, action: 'added' };
   }
 
   async removeMessageReaction(messageId: string, userId: string, emoji: string): Promise<void> {

@@ -11,10 +11,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { 
   Send, MessageSquare, Users, Smile, Paperclip, Mic, 
-  X, Reply, Image as ImageIcon, File, Download, AtSign 
+  X, Reply, Image as ImageIcon, File, Download, AtSign,
+  Phone, PhoneOff 
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useWebSocket } from "@/lib/websocket";
 import {
   Dialog,
   DialogContent,
@@ -71,9 +73,14 @@ export default function Chat() {
   const [mentionSearch, setMentionSearch] = useState("");
   const [showMentions, setShowMentions] = useState(false);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [isInCall, setIsInCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{ from: User; roomId: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const { isConnected, lastMessage, sendMessage } = useWebSocket();
 
   const { data: rooms = [] } = useQuery<ChatRoom[]>({
     queryKey: ["/api/chat/rooms"],
@@ -231,6 +238,63 @@ export default function Chat() {
       attachments: messageAttachments,
       replyTo: replyingTo?.id,
     });
+  };
+
+  const startCall = async () => {
+    if (!selectedRoom || selectedRoom.type !== 'private') return;
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStreamRef.current = stream;
+      
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+      peerConnectionRef.current = pc;
+
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendMessage({ 
+            type: 'ice_candidate', 
+            roomId: selectedRoom.id, 
+            candidate: event.candidate 
+          });
+        }
+      };
+
+      pc.ontrack = (event) => {
+        const audio = new Audio();
+        audio.srcObject = event.streams[0];
+        audio.play();
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      
+      sendMessage({ 
+        type: 'call_offer', 
+        roomId: selectedRoom.id, 
+        offer 
+      });
+      
+      setIsInCall(true);
+      toast({ title: "جاري الاتصال...", description: "انتظر إجابة المستخدم الآخر" });
+    } catch (error) {
+      toast({ title: "خطأ", description: "لا يمكن بدء المكالمة", variant: "destructive" });
+    }
+  };
+
+  const endCall = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+    }
+    setIsInCall(false);
+    sendMessage({ type: 'call_end', roomId: selectedRoom?.id });
   };
 
   const handleCreateRoom = () => {
@@ -419,11 +483,34 @@ export default function Chat() {
           <div className="flex-1 flex flex-col">
             {selectedRoom ? (
               <>
-                <div className="p-4 border-b border-border bg-card">
-                  <h3 className="font-bold text-lg">{getRoomName(selectedRoom)}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedRoom.members.length} أعضاء
-                  </p>
+                <div className="p-4 border-b border-border bg-card flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-lg">{getRoomName(selectedRoom)}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedRoom.members.length} أعضاء
+                    </p>
+                  </div>
+                  {selectedRoom.type === 'private' && (
+                    <Button
+                      variant={isInCall ? "destructive" : "outline"}
+                      size="sm"
+                      className="gap-2"
+                      onClick={isInCall ? endCall : startCall}
+                      data-testid="button-call"
+                    >
+                      {isInCall ? (
+                        <>
+                          <PhoneOff className="w-4 h-4" />
+                          <span>إنهاء المكالمة</span>
+                        </>
+                      ) : (
+                        <>
+                          <Phone className="w-4 h-4" />
+                          <span>مكالمة صوتية</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 <ScrollArea className="flex-1 p-4">
@@ -525,12 +612,55 @@ export default function Chat() {
                               </Popover>
                             </div>
                             {msg.reactions.length > 0 && (
-                              <div className="flex gap-1 mt-1">
-                                {msg.reactions.map((reaction, idx) => (
-                                  <span key={idx} className="text-xs bg-muted px-2 py-1 rounded">
-                                    {reaction.emoji}
-                                  </span>
-                                ))}
+                              <div className="flex gap-1 mt-1 flex-wrap">
+                                {Object.entries(
+                                  msg.reactions.reduce((acc: any, r: any) => {
+                                    if (!acc[r.emoji]) acc[r.emoji] = [];
+                                    acc[r.emoji].push(r);
+                                    return acc;
+                                  }, {})
+                                ).map(([emoji, reactionList]: [string, any]) => {
+                                  const count = reactionList.length;
+                                  const hasUserReacted = reactionList.some((r: any) => r.userId === user?.id);
+                                  return (
+                                    <Dialog key={emoji}>
+                                      <DialogTrigger asChild>
+                                        <button
+                                          className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                                            hasUserReacted 
+                                              ? 'bg-primary/20 border border-primary' 
+                                              : 'bg-muted hover:bg-muted/80'
+                                          }`}
+                                          data-testid={`reaction-count-${emoji}-${msg.id}`}
+                                        >
+                                          <span>{emoji}</span>
+                                          <span className="font-medium">{count}</span>
+                                        </button>
+                                      </DialogTrigger>
+                                      <DialogContent className="sm:max-w-md">
+                                        <DialogHeader>
+                                          <DialogTitle className="flex items-center gap-2">
+                                            <span className="text-2xl">{emoji}</span>
+                                            <span>التفاعلات</span>
+                                          </DialogTitle>
+                                        </DialogHeader>
+                                        <div className="space-y-2">
+                                          {reactionList.map((r: any) => {
+                                            const reactor = selectedRoom?.members.find(m => m.id === r.userId);
+                                            return (
+                                              <div key={r.id} className="flex items-center gap-2 p-2 rounded hover:bg-muted">
+                                                <Avatar>
+                                                  <AvatarFallback>{reactor?.fullName?.[0] || '?'}</AvatarFallback>
+                                                </Avatar>
+                                                <span className="font-medium">{reactor?.fullName || 'مستخدم'}</span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </DialogContent>
+                                    </Dialog>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
