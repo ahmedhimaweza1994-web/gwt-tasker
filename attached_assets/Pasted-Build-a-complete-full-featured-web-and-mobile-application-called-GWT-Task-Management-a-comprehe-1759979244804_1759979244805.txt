@@ -1,0 +1,382 @@
+Build a complete, full-featured web and mobile application called "GWT Task Management" – a comprehensive Task and Employee Management System for companies. The entire user interface, all text, labels, buttons, menus, notifications, reports, and any user-facing content must be in Arabic (using Modern Standard Arabic with some Egyptian colloquial touches for natural feel, e.g., "ابدأ الشيفت" for "Start Shift"). Ensure full RTL (Right-to-Left) support for Arabic layout. Do not use any English text except for internal code comments or variable names. Use a green color scheme throughout (primary #10B981, secondary #059669, accents #047857, backgrounds #F0FDF4, text #064E3B for dark green theme).
+
+Core Concept
+
+This is an advanced employee task tracking and management tool. Employees log in to track their daily activities via "AUX" statuses (e.g., Ready, Working on Project, Personal, Break), with real-time timers, notes for tasks, and progress markers. Admins get full oversight of all employees, including live dashboards, reports, and scheduling. Make it scalable, secure, and production-ready, not a simple prototype – include authentication, database, real-time updates, notifications, integrations, analytics, and mobile responsiveness. Integrate features for user profiles, task management (personal/shared/assigned), and enhanced admin controls for a collaborative team environment. Expand to a full HR system: Select and implement essential features for complete company task and employee management, including salaries, leaves, shifts, employees, tasks, reports, departments, and settings. Prioritize core HR modules like employee onboarding, payroll calculation, leave approvals, shift scheduling, department organization, and customizable settings, ensuring seamless integration with the existing system.
+
+Key Features (Implement All Fully)
+
+1. User Authentication & Roles
+
+
+
+
+
+Custom login/register with email/password and JWT tokens (no external services like Firebase or Supabase – use built-in backend with bcrypt for hashing and MySQL for storage).
+
+
+
+Roles: Employee (limited to own data), Admin (full access), Sub-Admin (per department). Store roles in MySQL table user_roles.
+
+
+
+Arabic UI: Login page with fields like "البريد الإلكتروني" (Email), "كلمة المرور" (Password), "تسجيل الدخول" (Login). Include registration form with "اسم الكامل" (Full Name).
+
+
+
+Forgot password flow with email reset using backend-generated tokens (store in MySQL).
+
+
+
+Security: Hash passwords with bcrypt, use JWT for sessions (localStorage for web, AsyncStorage for mobile). No external auth providers.
+
+2. Employee Dashboard (Main Screen)
+
+
+
+
+
+Real-time dashboard showing current shift status, active AUX timer (e.g., "بقالك 1 ساعة و 30 دقيقة في حالة العمل على مشروع" – "You've been in Working on Project for 1h 30m").
+
+
+
+AUX statuses: Ready (جاهز), Working on Project (عمل على مشروع), Personal (شخصي), Break (استراحة). Allow custom AUX addition by admin.
+
+
+
+Switch AUX button with dropdown, auto-pause previous timer.
+
+
+
+Notes section under each AUX: Text field for "شغال على إيه دلوقتي؟" (What are you working on now?), with options: In Progress (قيد التنفيذ), Done (مكتمل), Pending (معلق). Mark as done to archive.
+
+
+
+Daily/Weekly summary pie chart (in Arabic labels) showing time spent per AUX.
+
+
+
+Start/End Shift buttons, with auto-save to prevent data loss.
+
+
+
+Mobile: Native-like app with swipe gestures for switching AUX.
+
+3. Admin Dashboard (Full Oversight)
+
+
+
+
+
+Live overview grid/table of all employees: Who is logged in (متصل دلوقتي), current AUX, time spent, current note/task.
+
+
+
+Filter by department, shift time (morning/evening), or AUX status.
+
+
+
+Real-time updates via WebSockets (e.g., see employee switch AUX instantly).
+
+
+
+Employee management: Add/edit/delete users, assign departments, invite via email link.
+
+
+
+Arabic UI: Tables with headers like "اسم الموظف" (Employee Name), "حالة AUX الحالية" (Current AUX Status), "وقت مقضي" (Time Spent).
+
+
+
+Enhanced task overview: Display all system tasks with filters by user, department, status (pending/completed/overdue), or date. Include edit/delete capabilities for any task, user, or profile. Full system management: Change permissions (e.g., promote to sub-admin), reset passwords, view/edit/delete any data, and monitor activity logs in Arabic.
+
+4. Shift Scheduling & Management
+
+
+
+
+
+Admin creates shifts: Define schedules (e.g., 9 AM - 5 PM), assign to employees/groups.
+
+
+
+Employees confirm attendance via push notification or app alert.
+
+
+
+Shift swap requests: Employee requests swap with peer, admin approves/rejects.
+
+
+
+Integration with Google Calendar/Outlook: Auto-add shifts to calendars.
+
+
+
+Overlap detection: Warn if too many employees in same shift.
+
+5. Time Tracking & Notes
+
+
+
+
+
+Precise timers: Start/stop/pause per AUX, with idle detection (warn if inactive >5 min).
+
+
+
+Notes: Rich text editor for tasks, with timestamps, attachments (upload images/files), and history (view past notes).
+
+
+
+All data saved per user: Daily logs archived, searchable by date/AUX.
+
+
+
+Offline support: Sync when back online (using IndexedDB/Service Workers).
+
+6. Reports & Analytics
+
+
+
+
+
+Generate reports: Daily/Weekly/Monthly for individual or team.
+
+
+
+
+
+Breakdown: Time per AUX (e.g., 60% Working, 20% Break), productivity score (based on Working time vs. total).
+
+
+
+Visuals: Interactive charts (pie, bar, line) using Chart.js, with Arabic labels.
+
+
+
+Export: PDF/Excel/CSV, with Arabic headers and watermarked logo.
+
+
+
+Admin insights: Team averages, bottlenecks (e.g., high Break time), trends over time. Include task reports: Completed tasks, delays, user productivity (e.g., tasks per user).
+
+7. Notifications & Alerts
+
+
+
+
+
+Push notifications (via Firebase Cloud Messaging) for: Shift start/end, AUX time limits (e.g., "استراحتك طالت أكتر من 30 دقيقة" – "Your break exceeded 30 min"), task reminders.
+
+
+
+In-app alerts and email/SMS (integrate Twilio for SMS in Arabic).
+
+
+
+Admin alerts: Low attendance, overdue tasks. Add task-specific notifications: Task assigned (e.g., "عُيّنت لك مهمة جديدة من [اسم اليوزر]"), task completion by partner, friend requests/follows.
+
+8. Security & Compliance
+
+
+
+
+
+Data encryption (HTTPS, AES for storage).
+
+
+
+GDPR-compliant: User consent for data, export/delete own data.
+
+
+
+Audit logs: Track all actions (who changed what, when) in Arabic.
+
+
+
+Rate limiting, input validation to prevent injections.
+
+9. Integrations
+
+
+
+
+
+Slack/Teams: Send status updates (e.g., "أحمد غير حالته إلى عمل على مشروع").
+
+
+
+HR tools: Import employees from CSV or API (e.g., BambooHR).
+
+
+
+API endpoints: RESTful/GraphQL for custom extensions.
+
+10. UI/UX & Tech Stack
+
+
+
+
+
+Responsive web app (React.js/Next.js) + Mobile app (React Native for iOS/Android).
+
+
+
+Arabic RTL theme: Fonts like Noto Sans Arabic, dark/light mode.
+
+
+
+Intuitive design: Clean, modern (inspired by Notion/Toggl), with icons from Heroicons.
+
+
+
+Tech: Backend – Node.js/Express with MySQL (mysql2 driver); DB – MySQL (self-hosted, no external like Supabase); Real-time – Socket.io; Hosting – Vercel/AWS.
+
+
+
+Performance: Lazy loading, caching, <2s load times.
+
+
+
+Testing: Unit/integration tests, Arabic localization files.
+
+
+
+Self-contained: Generate all files ready for VPS deployment (cPanel with MySQL). Include .env.example with placeholders for DB (e.g., DATABASE_URL=mysql://user:pass@localhost/db_name), JWT_SECRET. Add deployment script (deploy.sh) for VPS: npm install, npm run build, npx mysql migrations, pm2 start server.js. Ensure no external dependencies for auth/DB – all in local MySQL.
+
+11. User Profiles (Public Profiles)
+
+
+
+
+
+Upon registration, every user can create a public profile page visible to all registered users.
+
+
+
+Profile features: Profile picture and cover photo upload (from device or library), personal info (name, job title, email, optional phone, short bio, external links like LinkedIn/Twitter).
+
+
+
+Current department section (e.g., "قسم المبيعات" – Sales Department), editable anytime.
+
+
+
+Accessible via personal link (e.g., example.com/user/username). Other users can view, follow, or send friend/collaboration requests.
+
+
+
+Arabic UI: Labels like "صورة الملف الشخصي" (Profile Picture), "وصف عن نفسي" (About Me), "تابع" (Follow), "طلب تعاون" (Collaboration Request).
+
+
+
+Real-time updates: Profile changes sync instantly; notifications for follows/requests.
+
+12. Task Management (Personal, Shared, and Assigned Tasks)
+
+
+
+
+
+Users add personal tasks to their profile: Title, description, priority (high/medium/low or 1-100%), deadline (date/time).
+
+
+
+Select collaborators from dropdown of all registered users (with search/filter by department/company).
+
+
+
+If a user adds another as collaborator, it appears in the other's profile as "شغال مع [اسم اليوزر] على [اسم المهمة]" with task link.
+
+
+
+On completion: Mark as "مكتملة" (Completed), send notifications to partners, auto-report to admin (task summary + time spent).
+
+
+
+Assign tasks to others: Dedicated "إنشاء مهمة" (Create Task) page with dropdown for assignee (searchable users), add partners, deadline, priority, file attachments.
+
+
+
+Assigned tasks appear in assignee's "المهام المعينة لي" (Assigned to Me) section with push/email notification.
+
+
+
+Real-time sync: Updates (status changes) reflect instantly across all involved users via WebSockets.
+
+
+
+Arabic UI: Labels like "نسبة الأهمية" (Priority), "موعد الاستحقاق" (Deadline), "إضافة شريك" (Add Partner).
+
+13. HR Management Features (Complete Employee System)
+
+
+
+
+
+Implement a full HR module as part of the system, selecting and prioritizing essential features for comprehensive company task and employee management:
+
+
+
+
+
+Employees: Employee profiles with onboarding forms, contact info, performance history, and document uploads (e.g., contracts).
+
+
+
+Tasks: Advanced task boards with Kanban view, subtasks, dependencies, and Gantt charts for project timelines.
+
+
+
+Leaves: Leave management with types (annual, sick, maternity), approval workflow, balance tracking, and calendar integration.
+
+
+
+Shifts: Shift planning with drag-and-drop calendar, overtime calculation, and conflict resolution.
+
+
+
+Salaries: Payroll system with salary calculation, deductions, bonuses, tax withholding, and payslip generation/export.
+
+
+
+Reports: HR reports for attendance, productivity, leave summaries, salary breakdowns, and department performance metrics.
+
+
+
+Departments: Department organization with hierarchy, role assignments, and team dashboards.
+
+
+
+Settings: System settings for custom fields, notification preferences, backup schedules, and user permissions.
+
+
+
+Ensure all features integrate with existing task tracking (e.g., tasks link to salaries for time-based pay, leaves affect shifts).
+
+
+
+Arabic UI: Labels like "إدارة الموظفين" (Employee Management), "حساب الرواتب" (Salary Calculation), "طلب إجازة" (Leave Request).
+
+
+
+Real-time: Updates for approvals, payroll runs, and reports.
+
+Implementation Instructions
+
+
+
+
+
+Generate the full codebase: Frontend, backend, database schema (add tables for profiles, tasks, task_collaborators, follows/requests, task_logs, employees, leaves, shifts, salaries, departments, settings), deployment scripts.
+
+
+
+Make it deployable: Include Docker for easy setup, env vars for secrets.
+
+
+
+No simplifications: Everything must be production-grade, with error handling, loading states, accessibility (ARIA labels in Arabic).
+
+
+
