@@ -493,9 +493,34 @@ export function registerRoutes(app: Express): Server {
   // Leave requests routes
   app.post("/api/leaves", requireAuth, async (req, res) => {
     try {
+      // Validate and calculate days automatically from start and end dates
+      const startDate = new Date(req.body.startDate);
+      const endDate = new Date(req.body.endDate);
+      
+      // Validate dates
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ message: "تواريخ غير صالحة" });
+      }
+      
+      if (startDate > endDate) {
+        return res.status(400).json({ message: "تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية" });
+      }
+      
+      // Normalize to start of day to avoid time-based miscalculations
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
+      
+      // Calculate inclusive day count (at least 1)
+      const days = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      
+      // Explicitly construct payload with whitelisted fields only
       const leaveRequest = await storage.createLeaveRequest({
-        ...req.body,
         userId: req.user!.id,
+        type: req.body.type,
+        startDate: req.body.startDate,
+        endDate: req.body.endDate,
+        days,
+        reason: req.body.reason,
       });
       
       // Notify admins
@@ -523,6 +548,7 @@ export function registerRoutes(app: Express): Server {
       
       res.status(201).json(leaveRequest);
     } catch (error) {
+      console.error('Error creating leave request:', error);
       res.status(500).json({ message: "حدث خطأ في تقديم طلب الإجازة" });
     }
   });
