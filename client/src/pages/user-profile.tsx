@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import NavHeader from "@/components/ui/nav-header";
-import Sidebar from "@/components/ui/sidebar";
+import Navigation from "@/components/navigation";
+import Sidebar from "@/components/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -105,11 +105,11 @@ export default function UserProfile() {
 
   if (profileLoading || !profile) {
     return (
-      <div className="flex h-screen bg-background rtl-grid">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <NavHeader />
-          <main className="flex-1 flex items-center justify-center">
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="flex">
+          <Sidebar />
+          <main className="flex-1 mr-64 p-8 flex items-center justify-center">
             <p className="text-muted-foreground">جاري التحميل...</p>
           </main>
         </div>
@@ -143,12 +143,11 @@ export default function UserProfile() {
   ].slice(0, 4);
 
   return (
-    <div className="flex h-screen bg-background rtl-grid">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <NavHeader />
-
-        <main className="flex-1 overflow-y-auto">
+    <div className="min-h-screen bg-background">
+      <Navigation />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 mr-64">
           {/* Cover Photo */}
           <div className="relative h-64 bg-gradient-to-br from-primary via-secondary to-chart-1">
             <div className="absolute inset-0 bg-black/20"></div>
@@ -322,6 +321,16 @@ export default function UserProfile() {
                             value={editData.address || ""}
                             onChange={(e) => setEditData({ ...editData, address: e.target.value })}
                             data-testid="input-edit-address"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="hireDate">تاريخ التعيين</Label>
+                          <Input
+                            id="hireDate"
+                            type="date"
+                            value={editData.hireDate ? new Date(editData.hireDate).toISOString().split('T')[0] : ""}
+                            onChange={(e) => setEditData({ ...editData, hireDate: e.target.value })}
+                            data-testid="input-edit-hiredate"
                           />
                         </div>
                       </div>

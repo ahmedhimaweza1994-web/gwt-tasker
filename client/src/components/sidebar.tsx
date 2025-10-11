@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { 
   Home, 
   CheckSquare, 
@@ -32,7 +32,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Sidebar() {
   const { user } = useAuth();
@@ -40,6 +43,7 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [meetingTitle, setMeetingTitle] = useState("");
   const { toast } = useToast();
 
   // Fetch user tasks for badge count
@@ -148,6 +152,31 @@ export default function Sidebar() {
     );
   };
 
+  const scheduleMeetingMutation = useMutation({
+    mutationFn: async (data: { title: string; participantIds: string[] }) => {
+      const res = await apiRequest("POST", "/api/meetings/schedule", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
+      toast({
+        title: "تم جدولة الاجتماع",
+        description: "تم إنشاء الاجتماع وإرسال الرابط للمشاركين في الدردشة",
+      });
+      window.open(data.meetingLink, '_blank');
+      setShowMeetingDialog(false);
+      setSelectedUsers([]);
+      setMeetingTitle("");
+    },
+    onError: () => {
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ في جدولة الاجتماع",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleScheduleMeeting = () => {
     if (selectedUsers.length === 0) {
       toast({
@@ -158,27 +187,19 @@ export default function Sidebar() {
       return;
     }
 
-    const selectedEmails = allUsers
-      .filter(u => selectedUsers.includes(u.id))
-      .map(u => u.email)
-      .join(',');
+    if (!meetingTitle.trim()) {
+      toast({
+        title: "لم يتم إدخال عنوان",
+        description: "الرجاء إدخال عنوان للاجتماع",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Create Google Meet link with calendar integration
-    const meetingUrl = `https://meet.google.com/new`;
-    
-    // Alternative: Open Google Calendar with pre-filled event
-    const calendarUrl = `https://calendar.google.com/calendar/u/0/r/eventedit?add=${encodeURIComponent(selectedEmails)}`;
-
-    // Open Google Meet in a new tab
-    window.open(meetingUrl, '_blank');
-
-    toast({
-      title: "تم فتح Google Meet",
-      description: `تم تحديد ${selectedUsers.length} مشارك للاجتماع`,
+    scheduleMeetingMutation.mutate({
+      title: meetingTitle,
+      participantIds: selectedUsers,
     });
-
-    setShowMeetingDialog(false);
-    setSelectedUsers([]);
   };
 
   return (
@@ -304,11 +325,21 @@ export default function Sidebar() {
           <DialogHeader>
             <DialogTitle className="text-right">جدولة اجتماع</DialogTitle>
             <DialogDescription className="text-right">
-              اختر المستخدمين الذين تريد دعوتهم للاجتماع
+              أدخل عنوان الاجتماع واختر المشاركين
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="meeting-title" className="text-right">عنوان الاجتماع</Label>
+              <Input
+                id="meeting-title"
+                value={meetingTitle}
+                onChange={(e) => setMeetingTitle(e.target.value)}
+                placeholder="مثال: اجتماع فريق التطوير"
+                data-testid="input-meeting-title"
+              />
+            </div>
             {isLoadingUsers ? (
               <div className="text-center text-muted-foreground py-8" data-testid="loading-users">
                 جاري تحميل المستخدمين...

@@ -123,8 +123,11 @@ export default function MyRequests() {
     const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
     createLeaveRequestMutation.mutate({
-      ...leaveForm,
+      type: leaveForm.type,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
       days,
+      reason: leaveForm.reason || '',
     });
   };
 

@@ -16,17 +16,23 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bell, Search, Moon, Sun, LogOut, User, Settings } from "lucide-react";
+import { Bell, Search, Moon, Sun, LogOut, User, Settings, FileText, Users as UsersIcon, CheckSquare } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Notification } from "@shared/schema";
+import { useWebSocket } from "@/lib/websocket";
+import { useToast } from "@/hooks/use-toast";
+import type { Notification, Task, User as UserType } from "@shared/schema";
 
 export default function Navigation() {
   const { user, logoutMutation } = useAuth();
   const [, setLocation] = useLocation();
   const [isDark, setIsDark] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const { lastMessage } = useWebSocket();
+  const { toast } = useToast();
 
   // Fetch notifications
   const { data: notifications = [] } = useQuery<Notification[]>({
@@ -37,6 +43,34 @@ export default function Navigation() {
 
   const unreadNotifications = notifications.filter(n => !n.isRead);
 
+  // Fetch tasks for search
+  const { data: tasks = [] } = useQuery<Task[]>({
+    queryKey: ["/api/tasks/all"],
+    enabled: !!user && !!searchTerm,
+  });
+
+  // Fetch users for search
+  const { data: users = [] } = useQuery<UserType[]>({
+    queryKey: ["/api/users"],
+    enabled: !!user && !!searchTerm,
+  });
+
+  // Filter search results
+  const searchResults = {
+    tasks: tasks.filter(task => 
+      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.companyName?.toLowerCase().includes(searchTerm.toLowerCase())
+    ).slice(0, 5),
+    users: users.filter(u => 
+      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.department.toLowerCase().includes(searchTerm.toLowerCase())
+    ).slice(0, 5),
+  };
+
+  const hasResults = searchResults.tasks.length > 0 || searchResults.users.length > 0;
+
   const markAsReadMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("PUT", `/api/notifications/${id}/read`);
@@ -46,6 +80,36 @@ export default function Navigation() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
   });
+
+  useEffect(() => {
+    if (searchTerm) {
+      setShowSearchResults(true);
+    } else {
+      setShowSearchResults(false);
+    }
+  }, [searchTerm]);
+
+  // Listen for real-time notifications via WebSocket
+  useEffect(() => {
+    if (lastMessage) {
+      if (lastMessage.type === 'new_notification' && lastMessage.data) {
+        const notification = lastMessage.data as Notification;
+        // Only show toast if it's for the current user
+        if (notification.userId === user?.id) {
+          toast({
+            title: notification.title,
+            description: notification.message,
+            variant: notification.type === 'error' ? 'destructive' : 'default',
+          });
+          // Refresh notifications list
+          queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+        }
+      } else if (lastMessage.type === 'new_message' && lastMessage.data) {
+        // Refresh notifications when new messages arrive (might trigger message notifications)
+        queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      }
+    }
+  }, [lastMessage, user, toast]);
 
   useEffect(() => {
     const darkMode = localStorage.getItem('darkMode') === 'true';
@@ -95,14 +159,89 @@ export default function Navigation() {
 
         {/* Search Bar */}
         <div className="hidden md:flex flex-1 max-w-sm mx-8">
-          <div className="relative w-full">
-            <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="البحث..."
-              className="w-full pr-10 bg-muted/50"
-              data-testid="nav-search-input"
-            />
-          </div>
+          <Popover open={showSearchResults} onOpenChange={setShowSearchResults}>
+            <PopoverTrigger asChild>
+              <div className="relative w-full">
+                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="البحث في المهام والمستخدمين..."
+                  className="w-full pr-10 bg-muted/50"
+                  data-testid="nav-search-input"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onFocus={() => searchTerm && setShowSearchResults(true)}
+                />
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="w-96 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+              <ScrollArea className="max-h-[400px]">
+                {!searchTerm ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    ابدأ بالكتابة للبحث...
+                  </div>
+                ) : !hasResults ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    لا توجد نتائج
+                  </div>
+                ) : (
+                  <div className="p-2">
+                    {searchResults.tasks.length > 0 && (
+                      <div className="mb-2">
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">المهام</div>
+                        {searchResults.tasks.map((task) => (
+                          <div
+                            key={task.id}
+                            className="p-2 rounded hover:bg-muted cursor-pointer"
+                            onClick={() => {
+                              setLocation('/tasks');
+                              setSearchTerm("");
+                              setShowSearchResults(false);
+                            }}
+                            data-testid={`search-result-task-${task.id}`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <CheckSquare className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{task.title}</p>
+                                {task.companyName && (
+                                  <p className="text-xs text-muted-foreground truncate">{task.companyName}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.users.length > 0 && (
+                      <div>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">المستخدمين</div>
+                        {searchResults.users.map((u) => (
+                          <div
+                            key={u.id}
+                            className="p-2 rounded hover:bg-muted cursor-pointer"
+                            onClick={() => {
+                              setLocation(`/profile/${u.id}`);
+                              setSearchTerm("");
+                              setShowSearchResults(false);
+                            }}
+                            data-testid={`search-result-user-${u.id}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <UsersIcon className="w-4 h-4 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{u.fullName}</p>
+                                <p className="text-xs text-muted-foreground truncate">{u.department} - {u.email}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Right Actions */}

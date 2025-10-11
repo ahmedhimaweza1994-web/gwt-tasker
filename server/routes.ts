@@ -459,6 +459,7 @@ export function registerRoutes(app: Express): Server {
         phoneNumber: req.body.phoneNumber,
         address: req.body.address,
         dateOfBirth: req.body.dateOfBirth,
+        hireDate: req.body.hireDate,
       });
       if (!updatedUser) {
         return res.status(404).json({ message: "المستخدم غير موجود" });
@@ -482,12 +483,22 @@ export function registerRoutes(app: Express): Server {
       const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
       
       for (const admin of adminUsers) {
-        await storage.createNotification(
+        const notification = await storage.createNotification(
           admin.id,
           "طلب إجازة جديد",
           `${req.user!.fullName} قدم طلب إجازة جديد`,
           "info"
         );
+        
+        // Broadcast notification via WebSocket
+        wss.clients.forEach((client) => {
+          if (client.readyState === client.OPEN) {
+            client.send(JSON.stringify({
+              type: 'new_notification',
+              data: notification
+            }));
+          }
+        });
       }
       
       res.status(201).json(leaveRequest);
@@ -529,12 +540,22 @@ export function registerRoutes(app: Express): Server {
       
       // Notify employee
       const statusText = leaveRequest.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
-      await storage.createNotification(
+      const notification = await storage.createNotification(
         leaveRequest.userId,
         "تحديث طلب الإجازة",
         `${statusText} طلب الإجازة الخاص بك`,
         leaveRequest.status === 'approved' ? 'success' : 'error'
       );
+      
+      // Broadcast notification via WebSocket
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_notification',
+            data: notification
+          }));
+        }
+      });
       
       res.json(leaveRequest);
     } catch (error) {
@@ -973,6 +994,95 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Meetings Routes
+  app.post("/api/meetings/schedule", requireAuth, async (req, res) => {
+    try {
+      const { title, participantIds } = req.body;
+      
+      const meetingId = Math.random().toString(36).substring(2, 15);
+      const meetingLink = `https://meet.google.com/${meetingId}`;
+      
+      const meeting = await storage.createMeeting({
+        title,
+        description: `اجتماع مع ${participantIds.length} مشارك`,
+        meetingLink,
+        scheduledBy: req.user!.id,
+        startTime: new Date(),
+        endTime: null,
+      });
+      
+      const allParticipantIds = [...participantIds, req.user!.id];
+      
+      for (const participantId of participantIds) {
+        await storage.addMeetingParticipant(meeting.id, participantId);
+      }
+      await storage.addMeetingParticipant(meeting.id, req.user!.id);
+      
+      let chatRoom;
+      if (participantIds.length === 1) {
+        chatRoom = await storage.getOrCreatePrivateChat(req.user!.id, participantIds[0]);
+      } else {
+        chatRoom = await storage.createChatRoom({
+          name: title,
+          type: 'group',
+          createdBy: req.user!.id,
+        });
+        
+        for (const participantId of allParticipantIds) {
+          await storage.addChatRoomMember(chatRoom.id, participantId);
+        }
+      }
+      
+      const message = await storage.createChatMessage({
+        roomId: chatRoom.id,
+        senderId: req.user!.id,
+        content: `🎥 ${title}\n\nانضم للاجتماع: ${meetingLink}`,
+        messageType: 'meeting_link',
+        attachments: [{
+          name: title,
+          url: meetingLink,
+          type: 'meeting'
+        }],
+      });
+      
+      for (const participantId of participantIds) {
+        const notification = await storage.createNotification(
+          participantId,
+          "اجتماع جديد",
+          `${req.user!.fullName} قام بجدولة اجتماع: ${title}`,
+          "info"
+        );
+        
+        // Broadcast notification via WebSocket
+        wss.clients.forEach((client) => {
+          if (client.readyState === client.OPEN) {
+            client.send(JSON.stringify({
+              type: 'new_notification',
+              data: notification
+            }));
+          }
+        });
+      }
+      
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_message',
+            data: message
+          }));
+          client.send(JSON.stringify({
+            type: 'new_meeting',
+            data: meeting
+          }));
+        }
+      });
+      
+      res.status(201).json({ ...meeting, chatRoomId: chatRoom.id });
+    } catch (error) {
+      console.error("Error scheduling meeting:", error);
+      res.status(500).json({ message: "حدث خطأ في جدولة الاجتماع" });
+    }
+  });
+
   app.post("/api/meetings", requireAuth, async (req, res) => {
     try {
       const meeting = await storage.createMeeting({
