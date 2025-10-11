@@ -73,6 +73,8 @@ export default function Chat() {
   const [mentionSearch, setMentionSearch] = useState("");
   const [showMentions, setShowMentions] = useState(false);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [openReactionPopover, setOpenReactionPopover] = useState<string | null>(null);
+  const [ringtone, setRingtone] = useState<HTMLAudioElement | null>(null);
   const [isInCall, setIsInCall] = useState(false);
   const [incomingCall, setIncomingCall] = useState<{ from: User; roomId: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -147,8 +149,9 @@ export default function Chat() {
       const res = await apiRequest("POST", "/api/chat/reactions", { messageId, emoji });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/messages", selectedRoom?.id] });
+      setOpenReactionPopover(null);
     },
   });
 
@@ -273,6 +276,10 @@ export default function Chat() {
         }
         remoteAudioRef.current.srcObject = event.streams[0];
         remoteAudioRef.current.play();
+        if (ringtone) {
+          ringtone.pause();
+          ringtone.currentTime = 0;
+        }
       };
 
       const offer = await pc.createOffer();
@@ -283,6 +290,11 @@ export default function Chat() {
         roomId: activeCallRoomIdRef.current, 
         offer 
       });
+      
+      if (ringtone) {
+        ringtone.loop = true;
+        ringtone.play().catch(console.error);
+      }
       
       setIsInCall(true);
       toast({ title: "جاري الاتصال...", description: "انتظر إجابة المستخدم الآخر" });
@@ -305,6 +317,10 @@ export default function Chat() {
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
       remoteAudioRef.current.srcObject = null;
+    }
+    if (ringtone) {
+      ringtone.pause();
+      ringtone.currentTime = 0;
     }
     setIsInCall(false);
     activeCallRoomIdRef.current = null;
@@ -351,6 +367,38 @@ export default function Chat() {
       setShowMentions(false);
     }
   }, [messageText]);
+
+  useEffect(() => {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const createRingtone = () => {
+      const duration = 1.5;
+      const sampleRate = audioContext.sampleRate;
+      const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+      const data = buffer.getChannelData(0);
+      
+      for (let i = 0; i < buffer.length; i++) {
+        const t = i / sampleRate;
+        data[i] = Math.sin(2 * Math.PI * 440 * t) * 0.3 * Math.exp(-3 * t);
+      }
+      
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      
+      const audio = new Audio();
+      const mediaStreamDestination = audioContext.createMediaStreamDestination();
+      source.connect(mediaStreamDestination);
+      
+      const ringtoneAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
+      setRingtone(ringtoneAudio);
+    };
+    
+    createRingtone();
+    
+    return () => {
+      audioContext.close();
+    };
+  }, []);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -655,7 +703,7 @@ export default function Chat() {
                               >
                                 <Reply className="w-3 h-3" />
                               </Button>
-                              <Popover>
+                              <Popover open={openReactionPopover === msg.id} onOpenChange={(open) => setOpenReactionPopover(open ? msg.id : null)}>
                                 <PopoverTrigger asChild>
                                   <Button size="sm" variant="ghost" className="h-6 px-2">
                                     <Smile className="w-3 h-3" />
@@ -667,7 +715,7 @@ export default function Chat() {
                                       <button
                                         key={emoji}
                                         onClick={() => addReactionMutation.mutate({ messageId: msg.id, emoji })}
-                                        className="text-lg hover:bg-muted p-1 rounded"
+                                        className="text-lg hover:bg-muted p-1 rounded transition-all hover:scale-125 active:scale-95"
                                         data-testid={`reaction-${emoji}-${msg.id}`}
                                       >
                                         {emoji}
@@ -799,15 +847,27 @@ export default function Chat() {
                   )}
 
                   {showMentions && filteredUsers.length > 0 && (
-                    <div className="bg-card border rounded-md mb-2 max-h-32 overflow-auto">
-                      {filteredUsers.map((u) => (
+                    <div className="bg-card border rounded-lg shadow-lg mb-2 max-h-40 overflow-auto">
+                      <div className="p-2 border-b bg-muted/50">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <AtSign className="w-3 h-3" />
+                          <span>اختر شخص للإشارة إليه</span>
+                        </p>
+                      </div>
+                      {filteredUsers.map((u, index) => (
                         <button
                           key={u.id}
                           onClick={() => insertMention(u.fullName)}
-                          className="w-full text-right p-2 hover:bg-muted flex items-center gap-2"
+                          className="w-full text-right p-3 hover:bg-primary/10 flex items-center gap-3 transition-colors border-b last:border-b-0"
                         >
-                          <AtSign className="w-3 h-3" />
-                          <span className="text-sm">{u.fullName}</span>
+                          <Avatar className="w-8 h-8">
+                            <AvatarFallback className="text-xs">{u.fullName[0]}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 text-right">
+                            <p className="text-sm font-medium">{u.fullName}</p>
+                            <p className="text-xs text-muted-foreground">{u.email}</p>
+                          </div>
+                          <AtSign className="w-4 h-4 text-primary" />
                         </button>
                       ))}
                     </div>
