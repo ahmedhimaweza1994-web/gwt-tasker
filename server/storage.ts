@@ -15,6 +15,7 @@ import {
   messageReactions,
   meetings,
   meetingParticipants,
+  googleCalendarTokens,
   type User,
   type InsertUser,
   type Task,
@@ -37,6 +38,8 @@ import {
   type Meeting,
   type InsertMeeting,
   type MeetingParticipant,
+  type GoogleCalendarToken,
+  type InsertGoogleCalendarToken,
   advanceStatusEnum
 } from "@shared/schema";
 import { db } from "./db";
@@ -132,6 +135,12 @@ export interface IStorage {
   addMeetingParticipant(meetingId: string, userId: string): Promise<void>;
   getUserMeetings(userId: string): Promise<Meeting[]>;
   getMeeting(meetingId: string): Promise<(Meeting & { participants: User[] }) | undefined>;
+
+  // Google Calendar Tokens
+  saveGoogleCalendarToken(userId: string, tokenData: InsertGoogleCalendarToken): Promise<GoogleCalendarToken>;
+  getGoogleCalendarToken(userId: string): Promise<GoogleCalendarToken | undefined>;
+  updateGoogleCalendarToken(userId: string, accessToken: string, expiresAt: Date): Promise<void>;
+  deleteGoogleCalendarToken(userId: string): Promise<boolean>;
 
 }
 
@@ -995,6 +1004,47 @@ export class DatabaseStorage implements IStorage {
       ...meeting,
       participants: participants.map(p => p.user),
     };
+  }
+
+  // Google Calendar Tokens
+  async saveGoogleCalendarToken(userId: string, tokenData: InsertGoogleCalendarToken): Promise<GoogleCalendarToken> {
+    const [token] = await db
+      .insert(googleCalendarTokens)
+      .values({ ...tokenData, userId })
+      .onConflictDoUpdate({
+        target: googleCalendarTokens.userId,
+        set: {
+          accessToken: tokenData.accessToken,
+          refreshToken: tokenData.refreshToken,
+          expiresAt: tokenData.expiresAt,
+          scope: tokenData.scope,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return token;
+  }
+
+  async getGoogleCalendarToken(userId: string): Promise<GoogleCalendarToken | undefined> {
+    const [token] = await db
+      .select()
+      .from(googleCalendarTokens)
+      .where(eq(googleCalendarTokens.userId, userId));
+    return token || undefined;
+  }
+
+  async updateGoogleCalendarToken(userId: string, accessToken: string, expiresAt: Date): Promise<void> {
+    await db
+      .update(googleCalendarTokens)
+      .set({ accessToken, expiresAt, updatedAt: new Date() })
+      .where(eq(googleCalendarTokens.userId, userId));
+  }
+
+  async deleteGoogleCalendarToken(userId: string): Promise<boolean> {
+    const result = await db
+      .delete(googleCalendarTokens)
+      .where(eq(googleCalendarTokens.userId, userId));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 }
 

@@ -1039,14 +1039,68 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Google Calendar Routes
+  // Google Calendar OAuth Routes
+  // Check connection status
   app.get("/api/google-calendar/status", requireAuth, async (req, res) => {
     try {
-      const { checkGoogleCalendarConnection } = await import("./google-calendar");
-      const isConnected = await checkGoogleCalendarConnection();
-      res.json({ connected: isConnected });
+      const token = await storage.getGoogleCalendarToken(req.user!.id);
+      res.json({ connected: !!token });
     } catch (error) {
       res.json({ connected: false });
+    }
+  });
+
+  // Initiate OAuth flow
+  app.get("/api/google-calendar/auth", requireAuth, async (req, res) => {
+    try {
+      const { getAuthorizationUrl } = await import("./google-calendar");
+      const authUrl = getAuthorizationUrl();
+      
+      // Store user ID in session for callback
+      req.session.googleAuthUserId = req.user!.id;
+      
+      res.json({ authUrl });
+    } catch (error) {
+      console.error("Error initiating Google OAuth:", error);
+      res.status(500).json({ message: "حدث خطأ في بدء عملية الربط" });
+    }
+  });
+
+  // OAuth callback
+  app.get("/api/google-calendar/callback", async (req, res) => {
+    try {
+      const code = req.query.code as string;
+      const userId = req.session.googleAuthUserId;
+      
+      if (!code || !userId) {
+        return res.redirect("/?error=auth_failed");
+      }
+      
+      const { exchangeCodeForTokens } = await import("./google-calendar");
+      const tokens = await exchangeCodeForTokens(code);
+      
+      // Save tokens to database
+      await storage.saveGoogleCalendarToken(userId, tokens);
+      
+      // Clean up session
+      delete req.session.googleAuthUserId;
+      
+      // Redirect back to app with success
+      res.redirect("/?google_calendar_connected=true");
+    } catch (error) {
+      console.error("Error in Google OAuth callback:", error);
+      res.redirect("/?error=auth_failed");
+    }
+  });
+
+  // Disconnect Google Calendar
+  app.delete("/api/google-calendar/disconnect", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteGoogleCalendarToken(req.user!.id);
+      res.json({ message: "تم فصل Google Calendar بنجاح" });
+    } catch (error) {
+      console.error("Error disconnecting Google Calendar:", error);
+      res.status(500).json({ message: "حدث خطأ في فصل Google Calendar" });
     }
   });
 
@@ -1055,24 +1109,42 @@ export function registerRoutes(app: Express): Server {
     try {
       const { title, participantIds } = req.body;
       
+      // Get user's Google Calendar token
+      const tokenData = await storage.getGoogleCalendarToken(req.user!.id);
+      if (!tokenData) {
+        return res.status(400).json({ 
+          message: "يرجى ربط حساب Google Calendar الخاص بك لإنشاء رابط Google Meet تلقائياً" 
+        });
+      }
+      
       // Create meeting with Google Calendar API to get proper Google Meet link
       const startTime = new Date();
       const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour from now
       
       let meetingLink: string;
       try {
+        const { createGoogleMeetEvent } = await import("./google-calendar");
         const meetData = await createGoogleMeetEvent(
+          tokenData,
           title,
           `اجتماع مع ${participantIds.length} مشارك`,
           startTime,
           endTime
         );
         meetingLink = meetData.meetingLink!;
+        
+        // If token was refreshed, update it in database
+        if (meetData.updatedTokens) {
+          await storage.updateGoogleCalendarToken(
+            req.user!.id,
+            meetData.updatedTokens.accessToken,
+            meetData.updatedTokens.expiresAt
+          );
+        }
       } catch (error) {
         console.error("Failed to create Google Meet link:", error);
-        // Fallback: ask user to provide their own meeting link
         return res.status(400).json({ 
-          message: "يرجى ربط حساب Google Calendar الخاص بك لإنشاء رابط Google Meet تلقائياً" 
+          message: "حدث خطأ في إنشاء رابط Google Meet. يرجى المحاولة مرة أخرى" 
         });
       }
       
