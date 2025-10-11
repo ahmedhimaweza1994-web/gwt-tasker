@@ -27,7 +27,9 @@ import {
   Save,
   X,
   Phone,
-  MapPin
+  MapPin,
+  Trophy,
+  Star
 } from "lucide-react";
 
 export default function UserProfile() {
@@ -229,7 +231,7 @@ export default function UserProfile() {
 
                   {/* Stats */}
                   {isOwnProfile && (
-                    <div className="grid grid-cols-3 gap-6 mt-6">
+                    <div className="grid grid-cols-4 gap-4 mt-6">
                       <div className="text-center">
                         <p className="text-2xl font-bold text-foreground" data-testid="text-total-tasks">{totalTasks}</p>
                         <p className="text-sm text-muted-foreground">مهام</p>
@@ -241,6 +243,13 @@ export default function UserProfile() {
                       <div className="text-center">
                         <p className="text-2xl font-bold text-foreground" data-testid="text-productivity-percentage">{productivity}%</p>
                         <p className="text-sm text-muted-foreground">نسبة الإنجاز</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Trophy className="w-5 h-5 text-yellow-500 animate-pulse" />
+                          <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-500" data-testid="text-total-points">{profile.totalPoints || 0}</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">نقاط المكافأة</p>
                       </div>
                     </div>
                   )}

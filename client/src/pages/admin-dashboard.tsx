@@ -18,7 +18,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Users, Clock, CheckCircle, AlertTriangle, Search, Filter, Eye, Mail, Briefcase, Building, Play, Pause } from "lucide-react";
 import { Redirect, useLocation } from "wouter";
-import type { User, AuxSession } from "@db/schema";
+import type { User, AuxSession } from "@shared/schema";
 interface SystemStats {
   totalUsers: number;
   activeUsers: number;

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
+import { exportToExcel, exportToPDF } from "@/lib/export-utils";
 import {
   BarChart3,
   PieChart,
@@ -101,7 +102,28 @@ export default function Reports() {
   };
 
   const handleExportReport = (format: string) => {
-    console.log(`Exporting report in ${format} format`);
+    const exportData = {
+      stats: {
+        avgProductivity,
+        totalWorkHours,
+        completedTasksCount,
+        activeEmployees,
+        totalEmployees,
+      },
+      auxDistribution,
+      departmentStats,
+      timeRange,
+      departmentFilter,
+    };
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const baseFilename = `report-${timestamp}`;
+
+    if (format === 'excel' || format === 'csv') {
+      exportToExcel(exportData, baseFilename);
+    } else if (format === 'pdf') {
+      exportToPDF(exportData, baseFilename, 'Reports and Analytics');
+    }
   };
 
   const avgProductivity = productivityStats?.averageProductivity ?? 0;

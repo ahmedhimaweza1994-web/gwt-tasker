@@ -21,7 +21,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Notification } from "@db/schema";
+import type { Notification } from "@shared/schema";
 
 export default function Navigation() {
   const { user, logoutMutation } = useAuth();

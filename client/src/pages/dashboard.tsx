@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
+import Leaderboard from "@/components/leaderboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Play, Pause, Clock, CheckCircle, AlertCircle, Coffee, User, Calendar } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { AuxSession, Task } from "@shared/schema";
+
+interface ProductivityStats {
+  productivityPercentage: number;
+}
 export default function Dashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -17,20 +23,20 @@ export default function Dashboard() {
   const [currentNotes, setCurrentNotes] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("ready");
   // Fetch current AUX session
-  const { data: currentSession, refetch: refetchCurrentSession } = useQuery({
+  const { data: currentSession, refetch: refetchCurrentSession } = useQuery<AuxSession | null>({
     queryKey: ["/api/aux/current"],
     refetchInterval: 1000, // Refresh every second for real-time updates
     retry: 1,
   });
   // Fetch productivity stats
-  const { data: productivityStats } = useQuery({
+  const { data: productivityStats } = useQuery<ProductivityStats>({
     queryKey: ["/api/analytics/productivity"],
   });
   // Fetch user tasks
-  const { data: userTasks = [] } = useQuery({
+  const { data: userTasks = [] } = useQuery<Task[]>({
     queryKey: ["/api/tasks/my"],
   });
-  const { data: assignedTasks = [] } = useQuery({
+  const { data: assignedTasks = [] } = useQuery<Task[]>({
     queryKey: ["/api/tasks/assigned"],
   });
   // AUX session mutations
@@ -423,6 +429,11 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Leaderboard */}
+          <div className="mt-6">
+            <Leaderboard limit={5} />
+          </div>
         </main>
       </div>
     </div>

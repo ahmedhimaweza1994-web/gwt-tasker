@@ -24,33 +24,71 @@ import {
   Plus,
   FileText,
   UserPlus,
-  Building
+  Building,
+  History
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Redirect, Link } from "wouter";
+import type { User, LeaveRequest, SalaryAdvanceRequest } from "@shared/schema";
+
+interface HRStats {
+  totalEmployees: number;
+  presentToday: number;
+  onLeave: number;
+  pendingRequests: number;
+  attendanceRate?: number;
+  avgWorkHoursPerDay?: number;
+  usedLeaveDays?: number;
+  departmentDistribution?: Array<{ dept: string; count: number; percentage: number }>;
+}
+
+interface PayrollEntry {
+  userId: string;
+  fullName: string;
+  department: string;
+  salary: string;
+  bonuses?: number;
+  deductions?: number;
+  netSalary?: number;
+}
+
+interface HRReports {
+  attendanceRate: number;
+  avgWorkHoursPerDay: number;
+  usedLeaveDays: number;
+  departmentDistribution: Array<{ dept: string; count: number; percentage: number }>;
+}
 
 export default function HRManagement() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Check if user has admin/sub-admin role
-  if (!user || (user.role !== 'admin' && user.role !== 'sub-admin')) {
+  if (!user) {
     return <Redirect to="/" />;
   }
 
+  const isAdmin = user.role === 'admin' || user.role === 'sub-admin';
+  
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
+  const [isSalaryAdvanceDialogOpen, setIsSalaryAdvanceDialogOpen] = useState(false);
   const [isAddEmployeeDialogOpen, setIsAddEmployeeDialogOpen] = useState(false);
   const [isEditEmployeeDialogOpen, setIsEditEmployeeDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   
   const [newLeaveRequest, setNewLeaveRequest] = useState({
-    userId: "",
+    userId: user.id,
     type: "annual",
     startDate: "",
     endDate: "",
     days: 0,
     reason: "",
+  });
+
+  const [newSalaryAdvance, setNewSalaryAdvance] = useState({
+    amount: "",
+    reason: "",
+    repaymentDate: "",
   });
 
   const [newEmployee, setNewEmployee] = useState({
@@ -65,29 +103,99 @@ export default function HRManagement() {
     salary: 0,
   });
 
-  // Fetch pending leave requests
-  const { data: pendingLeaveRequests = [] } = useQuery({
+  // Fetch pending leave requests (admin only)
+  const { data: pendingLeaveRequests = [] } = useQuery<LeaveRequest[]>({
     queryKey: ["/api/leaves/pending"],
+    enabled: isAdmin,
   });
 
-  // Fetch all users for HR purposes
-  const { data: allUsers = [] } = useQuery({
+  // Fetch pending salary advance requests (admin only)
+  const { data: pendingSalaryAdvances = [] } = useQuery<SalaryAdvanceRequest[]>({
+    queryKey: ["/api/salary-advances/pending"],
+    enabled: isAdmin,
+  });
+
+  // Fetch user's own leave requests (employee)
+  const { data: userLeaveRequests = [] } = useQuery<LeaveRequest[]>({
+    queryKey: ["/api/leaves"],
+    enabled: !isAdmin,
+  });
+
+  // Fetch user's own salary advance requests (employee)
+  const { data: userSalaryAdvances = [] } = useQuery<SalaryAdvanceRequest[]>({
+    queryKey: ["/api/salary-advances/user"],
+    enabled: !isAdmin,
+  });
+
+  // Fetch all users for HR purposes (admin only)
+  const { data: allUsers = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
+    enabled: isAdmin,
   });
 
-  // Fetch HR stats
-  const { data: hrStats } = useQuery({
+  // Fetch HR stats (admin only)
+  const { data: hrStats } = useQuery<HRStats>({
     queryKey: ["/api/hr/stats"],
+    enabled: isAdmin,
   });
 
-  // Fetch payroll data
-  const { data: payrollData = [] } = useQuery({
+  // Fetch payroll data (admin only)
+  const { data: payrollData = [] } = useQuery<PayrollEntry[]>({
     queryKey: ["/api/hr/payroll"],
+    enabled: isAdmin,
   });
 
-  // Fetch HR reports
-  const { data: hrReports } = useQuery({
+  // Fetch HR reports (admin only)
+  const { data: hrReports } = useQuery<HRReports>({
     queryKey: ["/api/hr/reports"],
+    enabled: isAdmin,
+  });
+
+  // Employee leave request mutation
+  const createLeaveRequestMutation = useMutation({
+    mutationFn: async (data: typeof newLeaveRequest) => {
+      const res = await apiRequest("POST", "/api/leaves", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leaves"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leaves/pending"] });
+      setIsLeaveDialogOpen(false);
+      setNewLeaveRequest({
+        userId: user.id,
+        type: "annual",
+        startDate: "",
+        endDate: "",
+        days: 0,
+        reason: "",
+      });
+      toast({
+        title: "تم إرسال الطلب",
+        description: "تم إرسال طلب الإجازة بنجاح وسيتم مراجعته قريباً",
+      });
+    },
+  });
+
+  // Employee salary advance request mutation
+  const createSalaryAdvanceMutation = useMutation({
+    mutationFn: async (data: typeof newSalaryAdvance) => {
+      const res = await apiRequest("POST", "/api/salary-advances", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/salary-advances/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/salary-advances/pending"] });
+      setIsSalaryAdvanceDialogOpen(false);
+      setNewSalaryAdvance({
+        amount: "",
+        reason: "",
+        repaymentDate: "",
+      });
+      toast({
+        title: "تم إرسال الطلب",
+        description: "تم إرسال طلب السلفة بنجاح وسيتم مراجعته قريباً",
+      });
+    },
   });
 
   // Approve/Reject leave mutation
@@ -104,6 +212,24 @@ export default function HRManagement() {
       toast({
         title: "تم تحديث طلب الإجازة",
         description: "تم تحديث حالة طلب الإجازة بنجاح",
+      });
+    },
+  });
+
+  // Approve/Reject salary advance mutation
+  const updateSalaryAdvanceMutation = useMutation({
+    mutationFn: async (data: { id: string; status: string; rejectionReason?: string }) => {
+      const res = await apiRequest("PUT", `/api/salary-advances/${data.id}`, {
+        status: data.status,
+        rejectionReason: data.rejectionReason,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/salary-advances/pending"] });
+      toast({
+        title: "تم تحديث طلب السلفة",
+        description: "تم تحديث حالة طلب السلفة بنجاح",
       });
     },
   });
@@ -163,6 +289,14 @@ export default function HRManagement() {
     updateLeaveMutation.mutate({ id, status: "rejected", rejectionReason: reason });
   };
 
+  const handleApproveSalaryAdvance = (id: string) => {
+    updateSalaryAdvanceMutation.mutate({ id, status: "approved" });
+  };
+
+  const handleRejectSalaryAdvance = (id: string, reason: string) => {
+    updateSalaryAdvanceMutation.mutate({ id, status: "rejected", rejectionReason: reason });
+  };
+
   const getLeaveTypeLabel = (type: string) => {
     switch (type) {
       case "annual": return "سنوية";
@@ -175,13 +309,278 @@ export default function HRManagement() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "approved": return "success";
+      case "approved": return "default";
       case "rejected": return "destructive";
       case "pending": return "secondary";
       default: return "outline";
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "approved": return "موافق عليه";
+      case "rejected": return "مرفوض";
+      case "pending": return "قيد المراجعة";
+      default: return status;
+    }
+  };
+
+  // Employee View
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        
+        <div className="flex">
+          <Sidebar />
+          
+          <main className="flex-1 p-6 mr-64">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-foreground mb-2">
+                طلباتي
+              </h1>
+              <p className="text-muted-foreground">
+                إدارة طلبات الإجازات والسلف
+              </p>
+            </div>
+
+            <Tabs defaultValue="request-leave" className="space-y-6">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="request-leave" data-testid="tab-request-leave">طلب إجازة</TabsTrigger>
+                <TabsTrigger value="request-advance" data-testid="tab-request-advance">طلب سلفة</TabsTrigger>
+                <TabsTrigger value="leave-history" data-testid="tab-leave-history">سجل الإجازات</TabsTrigger>
+                <TabsTrigger value="advance-history" data-testid="tab-advance-history">سجل السلف</TabsTrigger>
+              </TabsList>
+
+              {/* Request Leave Tab */}
+              <TabsContent value="request-leave">
+                <Card data-testid="card-request-leave">
+                  <CardHeader>
+                    <CardTitle>طلب إجازة جديد</CardTitle>
+                    <CardDescription>
+                      قم بتعبئة النموذج أدناه لطلب إجازة
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4 max-w-2xl">
+                      <div>
+                        <Label>نوع الإجازة</Label>
+                        <Select value={newLeaveRequest.type} onValueChange={(value) => setNewLeaveRequest({...newLeaveRequest, type: value})}>
+                          <SelectTrigger data-testid="select-leave-type-employee">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="annual">سنوية</SelectItem>
+                            <SelectItem value="sick">مرضية</SelectItem>
+                            <SelectItem value="maternity">أمومة</SelectItem>
+                            <SelectItem value="emergency">طارئة</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>تاريخ البداية</Label>
+                          <Input
+                            type="date"
+                            value={newLeaveRequest.startDate}
+                            onChange={(e) => setNewLeaveRequest({...newLeaveRequest, startDate: e.target.value})}
+                            data-testid="input-leave-start-date-employee"
+                          />
+                        </div>
+                        <div>
+                          <Label>تاريخ النهاية</Label>
+                          <Input
+                            type="date"
+                            value={newLeaveRequest.endDate}
+                            onChange={(e) => setNewLeaveRequest({...newLeaveRequest, endDate: e.target.value})}
+                            data-testid="input-leave-end-date-employee"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>عدد الأيام</Label>
+                        <Input
+                          type="number"
+                          value={newLeaveRequest.days}
+                          onChange={(e) => setNewLeaveRequest({...newLeaveRequest, days: Number(e.target.value)})}
+                          placeholder="0"
+                          data-testid="input-leave-days-employee"
+                        />
+                      </div>
+                      <div>
+                        <Label>السبب</Label>
+                        <Textarea
+                          value={newLeaveRequest.reason}
+                          onChange={(e) => setNewLeaveRequest({...newLeaveRequest, reason: e.target.value})}
+                          placeholder="أدخل سبب الإجازة"
+                          data-testid="input-leave-reason-employee"
+                        />
+                      </div>
+                      <Button 
+                        onClick={() => createLeaveRequestMutation.mutate(newLeaveRequest)}
+                        disabled={createLeaveRequestMutation.isPending || !newLeaveRequest.startDate || !newLeaveRequest.endDate || newLeaveRequest.days <= 0}
+                        className="w-full"
+                        data-testid="button-submit-leave-employee"
+                      >
+                        {createLeaveRequestMutation.isPending ? "جاري الإرسال..." : "إرسال الطلب"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Request Salary Advance Tab */}
+              <TabsContent value="request-advance">
+                <Card data-testid="card-request-advance">
+                  <CardHeader>
+                    <CardTitle>طلب سلفة جديد</CardTitle>
+                    <CardDescription>
+                      قم بتعبئة النموذج أدناه لطلب سلفة من الراتب
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4 max-w-2xl">
+                      <div>
+                        <Label>المبلغ (ر.س)</Label>
+                        <Input
+                          type="number"
+                          value={newSalaryAdvance.amount}
+                          onChange={(e) => setNewSalaryAdvance({...newSalaryAdvance, amount: e.target.value})}
+                          placeholder="0"
+                          data-testid="input-advance-amount"
+                        />
+                      </div>
+                      <div>
+                        <Label>تاريخ السداد المتوقع</Label>
+                        <Input
+                          type="date"
+                          value={newSalaryAdvance.repaymentDate}
+                          onChange={(e) => setNewSalaryAdvance({...newSalaryAdvance, repaymentDate: e.target.value})}
+                          data-testid="input-advance-repayment-date"
+                        />
+                      </div>
+                      <div>
+                        <Label>السبب</Label>
+                        <Textarea
+                          value={newSalaryAdvance.reason}
+                          onChange={(e) => setNewSalaryAdvance({...newSalaryAdvance, reason: e.target.value})}
+                          placeholder="أدخل سبب طلب السلفة"
+                          data-testid="input-advance-reason"
+                        />
+                      </div>
+                      <Button 
+                        onClick={() => createSalaryAdvanceMutation.mutate(newSalaryAdvance)}
+                        disabled={createSalaryAdvanceMutation.isPending || !newSalaryAdvance.amount || !newSalaryAdvance.reason}
+                        className="w-full"
+                        data-testid="button-submit-advance"
+                      >
+                        {createSalaryAdvanceMutation.isPending ? "جاري الإرسال..." : "إرسال الطلب"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Leave History Tab */}
+              <TabsContent value="leave-history">
+                <Card data-testid="card-leave-history">
+                  <CardHeader>
+                    <CardTitle>سجل طلبات الإجازات</CardTitle>
+                    <CardDescription>
+                      عرض جميع طلبات الإجازات السابقة والحالية
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {userLeaveRequests.map((request: any) => (
+                        <div key={request.id} className="p-4 rounded-lg border" data-testid={`user-leave-${request.id}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="outline">{getLeaveTypeLabel(request.type)}</Badge>
+                                <Badge variant={getStatusColor(request.status) as any}>{getStatusLabel(request.status)}</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(request.startDate).toLocaleDateString('ar-EG')} - {new Date(request.endDate).toLocaleDateString('ar-EG')} ({request.days} أيام)
+                              </p>
+                              {request.reason && (
+                                <p className="text-sm mt-2">{request.reason}</p>
+                              )}
+                              {request.rejectionReason && (
+                                <p className="text-sm text-destructive mt-2">سبب الرفض: {request.rejectionReason}</p>
+                              )}
+                            </div>
+                            <Calendar className="w-8 h-8 text-muted-foreground" />
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {userLeaveRequests.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          لا توجد طلبات إجازات
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Salary Advance History Tab */}
+              <TabsContent value="advance-history">
+                <Card data-testid="card-advance-history">
+                  <CardHeader>
+                    <CardTitle>سجل طلبات السلف</CardTitle>
+                    <CardDescription>
+                      عرض جميع طلبات السلف السابقة والحالية
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {userSalaryAdvances.map((request: any) => (
+                        <div key={request.id} className="p-4 rounded-lg border" data-testid={`user-advance-${request.id}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-lg font-bold">{Number(request.amount).toLocaleString()} ر.س</span>
+                                <Badge variant={getStatusColor(request.status) as any}>{getStatusLabel(request.status)}</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                تاريخ الطلب: {new Date(request.createdAt).toLocaleDateString('ar-EG')}
+                              </p>
+                              {request.repaymentDate && (
+                                <p className="text-sm text-muted-foreground">
+                                  تاريخ السداد: {new Date(request.repaymentDate).toLocaleDateString('ar-EG')}
+                                </p>
+                              )}
+                              {request.reason && (
+                                <p className="text-sm mt-2">{request.reason}</p>
+                              )}
+                              {request.rejectionReason && (
+                                <p className="text-sm text-destructive mt-2">سبب الرفض: {request.rejectionReason}</p>
+                              )}
+                            </div>
+                            <DollarSign className="w-8 h-8 text-muted-foreground" />
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {userSalaryAdvances.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          لا توجد طلبات سلف
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin View
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
@@ -367,8 +766,9 @@ export default function HRManagement() {
 
           {/* HR Tabs */}
           <Tabs defaultValue="leave-requests" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="leave-requests">طلبات الإجازات</TabsTrigger>
+              <TabsTrigger value="salary-advances">طلبات السلف</TabsTrigger>
               <TabsTrigger value="payroll">الرواتب</TabsTrigger>
               <TabsTrigger value="employees">الموظفين</TabsTrigger>
               <TabsTrigger value="reports">تقارير HR</TabsTrigger>
@@ -378,124 +778,10 @@ export default function HRManagement() {
             <TabsContent value="leave-requests">
               <Card data-testid="card-leave-requests">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>طلبات الإجازات</CardTitle>
-                      <CardDescription>
-                        مراجعة والموافقة على طلبات الإجازات
-                      </CardDescription>
-                    </div>
-                    <Dialog open={isLeaveDialogOpen} onOpenChange={setIsLeaveDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button data-testid="button-create-leave-request">
-                          <Plus className="w-4 h-4 ml-2" />
-                          طلب إجازة
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent data-testid="dialog-create-leave-request">
-                        <DialogHeader>
-                          <DialogTitle>طلب إجازة جديد</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 mt-4">
-                          <div>
-                            <Label>الموظف</Label>
-                            <Select value={newLeaveRequest.userId} onValueChange={(value) => setNewLeaveRequest({...newLeaveRequest, userId: value})}>
-                              <SelectTrigger data-testid="select-leave-employee">
-                                <SelectValue placeholder="اختر الموظف" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {allUsers.map((emp: any) => (
-                                  <SelectItem key={emp.id} value={emp.id}>{emp.fullName}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>نوع الإجازة</Label>
-                            <Select value={newLeaveRequest.type} onValueChange={(value) => setNewLeaveRequest({...newLeaveRequest, type: value})}>
-                              <SelectTrigger data-testid="select-leave-type">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="annual">سنوية</SelectItem>
-                                <SelectItem value="sick">مرضية</SelectItem>
-                                <SelectItem value="maternity">أمومة</SelectItem>
-                                <SelectItem value="emergency">طارئة</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label>تاريخ البداية</Label>
-                              <Input
-                                type="date"
-                                value={newLeaveRequest.startDate}
-                                onChange={(e) => setNewLeaveRequest({...newLeaveRequest, startDate: e.target.value})}
-                                data-testid="input-leave-start-date"
-                              />
-                            </div>
-                            <div>
-                              <Label>تاريخ النهاية</Label>
-                              <Input
-                                type="date"
-                                value={newLeaveRequest.endDate}
-                                onChange={(e) => setNewLeaveRequest({...newLeaveRequest, endDate: e.target.value})}
-                                data-testid="input-leave-end-date"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <Label>عدد الأيام</Label>
-                            <Input
-                              type="number"
-                              value={newLeaveRequest.days}
-                              onChange={(e) => setNewLeaveRequest({...newLeaveRequest, days: Number(e.target.value)})}
-                              placeholder="0"
-                              data-testid="input-leave-days"
-                            />
-                          </div>
-                          <div>
-                            <Label>السبب</Label>
-                            <Textarea
-                              value={newLeaveRequest.reason}
-                              onChange={(e) => setNewLeaveRequest({...newLeaveRequest, reason: e.target.value})}
-                              placeholder="أدخل سبب الإجازة"
-                              data-testid="input-leave-reason"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end gap-2 mt-4">
-                          <Button variant="outline" onClick={() => setIsLeaveDialogOpen(false)} data-testid="button-cancel-leave">
-                            إلغاء
-                          </Button>
-                          <Button 
-                            onClick={() => {
-                              apiRequest("POST", "/api/leaves", newLeaveRequest).then(() => {
-                                queryClient.invalidateQueries({ queryKey: ["/api/leaves/pending"] });
-                                setIsLeaveDialogOpen(false);
-                                setNewLeaveRequest({
-                                  userId: "",
-                                  type: "annual",
-                                  startDate: "",
-                                  endDate: "",
-                                  days: 0,
-                                  reason: "",
-                                });
-                                toast({
-                                  title: "تم إنشاء الطلب",
-                                  description: "تم إنشاء طلب الإجازة بنجاح",
-                                });
-                              });
-                            }}
-                            disabled={!newLeaveRequest.userId || !newLeaveRequest.startDate || !newLeaveRequest.endDate}
-                            data-testid="button-submit-leave"
-                          >
-                            إنشاء الطلب
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
+                  <CardTitle>طلبات الإجازات المعلقة</CardTitle>
+                  <CardDescription>
+                    مراجعة والموافقة على طلبات الإجازات
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -503,14 +789,14 @@ export default function HRManagement() {
                       <div key={request.id} className="flex items-center justify-between p-4 rounded-lg border" data-testid={`leave-request-${request.id}`}>
                         <div className="flex items-center gap-4">
                           <Avatar>
-                            <AvatarImage src={request.user.profilePicture} />
+                            <AvatarImage src={request.user?.profilePicture} />
                             <AvatarFallback>
-                              {request.user.fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                              {request.user?.fullName?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) || 'U'}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <h4 className="font-semibold text-foreground">{request.user.fullName}</h4>
-                            <p className="text-sm text-muted-foreground">{request.user.department}</p>
+                            <h4 className="font-semibold text-foreground">{request.user?.fullName}</h4>
+                            <p className="text-sm text-muted-foreground">{request.user?.department}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <Badge variant="outline">{getLeaveTypeLabel(request.type)}</Badge>
                               <span className="text-xs text-muted-foreground">
@@ -550,6 +836,77 @@ export default function HRManagement() {
                     {pendingLeaveRequests.length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
                         لا توجد طلبات إجازات معلقة
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Salary Advances Tab */}
+            <TabsContent value="salary-advances">
+              <Card data-testid="card-salary-advances">
+                <CardHeader>
+                  <CardTitle>طلبات السلف المعلقة</CardTitle>
+                  <CardDescription>
+                    مراجعة والموافقة على طلبات السلف
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {pendingSalaryAdvances.map((request: any) => (
+                      <div key={request.id} className="flex items-center justify-between p-4 rounded-lg border" data-testid={`salary-advance-${request.id}`}>
+                        <div className="flex items-center gap-4">
+                          <Avatar>
+                            <AvatarImage src={request.user?.profilePicture} />
+                            <AvatarFallback>
+                              {request.user?.fullName?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h4 className="font-semibold text-foreground">{request.user?.fullName}</h4>
+                            <p className="text-sm text-muted-foreground">{request.user?.department}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-lg font-bold">{Number(request.amount).toLocaleString()} ر.س</span>
+                              {request.repaymentDate && (
+                                <span className="text-xs text-muted-foreground">
+                                  • السداد: {new Date(request.repaymentDate).toLocaleDateString('ar-EG')}
+                                </span>
+                              )}
+                            </div>
+                            {request.reason && (
+                              <p className="text-sm text-muted-foreground mt-1">{request.reason}</p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleApproveSalaryAdvance(request.id)}
+                            disabled={updateSalaryAdvanceMutation.isPending}
+                            data-testid={`button-approve-advance-${request.id}`}
+                          >
+                            <CheckCircle className="w-4 h-4 ml-1" />
+                            موافقة
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleRejectSalaryAdvance(request.id, "تم الرفض من قبل الإدارة")}
+                            disabled={updateSalaryAdvanceMutation.isPending}
+                            data-testid={`button-reject-advance-${request.id}`}
+                          >
+                            <XCircle className="w-4 h-4 ml-1" />
+                            رفض
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {pendingSalaryAdvances.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        لا توجد طلبات سلف معلقة
                       </div>
                     )}
                   </div>

@@ -131,7 +131,7 @@ export default function TaskManagement() {
     });
   };
   // Get unique departments
-  const departments = [...new Set(users.map(user => user.department))].filter(dep => dep);
+  const departments = Array.from(new Set(users.map(user => user.department))).filter(dep => dep);
   return (
     <div className="min-h-screen bg-background">
       <Navigation />

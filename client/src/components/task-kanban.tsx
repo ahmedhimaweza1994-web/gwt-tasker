@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   MoreHorizontal,
   Calendar,
@@ -12,7 +14,9 @@ import {
   Plus,
   AlertCircle,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Trophy,
+  Star
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,6 +24,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -33,6 +44,9 @@ interface TaskKanbanProps {
 export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewTasks, completedTasks }: TaskKanbanProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const [assignPointsDialog, setAssignPointsDialog] = useState<{ open: boolean; taskId: string | null }>({ open: false, taskId: null });
+  const [rewardPoints, setRewardPoints] = useState("");
+  
   // Update task status mutation
   const updateTaskMutation = useMutation({
     mutationFn: async (data: { taskId: string; status: string }) => {
@@ -87,6 +101,47 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
   const handleApproveTask = (taskId: string) => {
     approveTaskMutation.mutate(taskId);
   };
+
+  // Assign points mutation
+  const assignPointsMutation = useMutation({
+    mutationFn: async (data: { taskId: string; rewardPoints: number }) => {
+      const res = await apiRequest("PUT", `/api/tasks/${data.taskId}/assign-points`, { rewardPoints: data.rewardPoints });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/assigned"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      setAssignPointsDialog({ open: false, taskId: null });
+      setRewardPoints("");
+      toast({
+        title: "تم تعيين النقاط بنجاح",
+        description: "تمت إضافة نقاط المكافأة للمهمة والموظف",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في تعيين النقاط",
+        description: error.message || "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAssignPoints = () => {
+    if (!assignPointsDialog.taskId || !rewardPoints) return;
+    const points = parseInt(rewardPoints);
+    if (isNaN(points) || points <= 0) {
+      toast({
+        title: "خطأ في القيمة",
+        description: "يجب إدخال رقم صحيح أكبر من صفر",
+        variant: "destructive",
+      });
+      return;
+    }
+    assignPointsMutation.mutate({ taskId: assignPointsDialog.taskId, rewardPoints: points });
+  };
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "high": return "destructive";
@@ -115,9 +170,10 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
     if (diffDays === 1) return "غداً";
     return `${diffDays} أيام`;
   };
-  const TaskCard = ({ task, status }: { task: Task; status: string }) => (
-    <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer group" data-testid={`task-card-${task.id}`}>
-      <CardContent className="p-4">
+  const TaskCard = ({ task, status }: { task: Task; status: string }) => {
+    return (
+      <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer group" data-testid={`task-card-${task.id}`}>
+        <CardContent className="p-4">
         <div className="flex items-start justify-between mb-3">
           <h4 className="font-semibold text-foreground text-sm leading-tight flex-1 ml-2">
             {task.title}
@@ -180,6 +236,13 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
               <MessageSquare className="w-3 h-3" />
               <span>0</span>
             </div>
+            
+            {task.rewardPoints && task.rewardPoints > 0 && (
+              <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-500 font-semibold" data-testid={`task-reward-points-${task.id}`}>
+                <Star className="w-3 h-3 fill-current" />
+                <span>{task.rewardPoints}</span>
+              </div>
+            )}
           </div>
           {task.dueDate && (
             <div className={`flex items-center gap-1 ${
@@ -193,8 +256,11 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
+
   return (
+    <>
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-testid="kanban-board">
       {/* Pending Column */}
       <div className="space-y-4">
@@ -320,13 +386,98 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
           </CardHeader>
         </Card>
         <div className="space-y-3" data-testid="kanban-completed-column">
-          {completedTasks.map((task) => (
-            <div key={task.id} className="opacity-75 hover:opacity-100 transition-opacity">
-              <TaskCard task={task} status="completed" />
-            </div>
-          ))}
+          {completedTasks.map((task) => {
+            const canAssignPoints = user && (
+              user.role === 'admin' || 
+              user.role === 'sub-admin' || 
+              task.createdBy === user.id
+            );
+            
+            return (
+              <div key={task.id} className="opacity-75 hover:opacity-100 transition-opacity">
+                <TaskCard task={task} status="completed" />
+                {canAssignPoints && !task.rewardPoints && (
+                  <Button
+                    onClick={() => {
+                      setAssignPointsDialog({ open: true, taskId: task.id });
+                      setRewardPoints("");
+                    }}
+                    className="w-full mt-2"
+                    size="sm"
+                    variant="outline"
+                    data-testid={`button-assign-points-${task.id}`}
+                  >
+                    <Trophy className="w-4 h-4 ml-2 text-yellow-500" />
+                    تعيين نقاط المكافأة
+                  </Button>
+                )}
+                {task.rewardPoints && task.rewardPoints > 0 && (
+                  <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center gap-2">
+                    <Trophy className="w-4 h-4 text-yellow-600 dark:text-yellow-500" />
+                    <span className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">
+                      {task.rewardPoints} نقطة مكافأة
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
+    
+    {/* Assign Points Dialog */}
+    <Dialog open={assignPointsDialog.open} onOpenChange={(open) => !open && setAssignPointsDialog({ open: false, taskId: null })}>
+      <DialogContent data-testid="dialog-assign-points">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-yellow-500" />
+            تعيين نقاط المكافأة
+          </DialogTitle>
+          <DialogDescription>
+            قم بتعيين نقاط المكافأة للمهمة المكتملة. سيتم إضافة النقاط لرصيد الموظف المسؤول عن المهمة.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <Label htmlFor="reward-points">عدد النقاط *</Label>
+            <div className="flex items-center gap-2">
+              <Star className="w-5 h-5 text-yellow-500" />
+              <Input
+                id="reward-points"
+                type="number"
+                placeholder="أدخل عدد النقاط (مثال: 100)"
+                value={rewardPoints}
+                onChange={(e) => setRewardPoints(e.target.value)}
+                min="1"
+                data-testid="input-reward-points"
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-3">
+            <Button
+              onClick={handleAssignPoints}
+              disabled={assignPointsMutation.isPending || !rewardPoints}
+              className="flex-1"
+              data-testid="button-submit-points"
+            >
+              <Trophy className="w-4 h-4 ml-2" />
+              {assignPointsMutation.isPending ? "جاري التعيين..." : "تعيين النقاط"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAssignPointsDialog({ open: false, taskId: null })}
+              data-testid="button-cancel-points"
+            >
+              إلغاء
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
