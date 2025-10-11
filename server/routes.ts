@@ -517,10 +517,10 @@ export function registerRoutes(app: Express): Server {
       const leaveRequest = await storage.createLeaveRequest({
         userId: req.user!.id,
         type: req.body.type,
-        startDate: req.body.startDate,
-        endDate: req.body.endDate,
+        startDate: startDate,
+        endDate: endDate,
         days,
-        reason: req.body.reason,
+        reason: req.body.reason || '',
       });
       
       // Notify admins
