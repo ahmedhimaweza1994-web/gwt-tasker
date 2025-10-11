@@ -160,6 +160,29 @@ export default function Sidebar() {
     );
   };
 
+  const handleConnectGoogleCalendar = async () => {
+    try {
+      const res = await apiRequest("GET", "/api/google-calendar/auth");
+      const data = await res.json();
+      
+      if (data.authUrl) {
+        // Open Google OAuth page in new window
+        window.open(data.authUrl, '_blank', 'width=600,height=700');
+        
+        toast({
+          title: "جاري الربط",
+          description: "يرجى إكمال عملية الربط في النافذة الجديدة",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "حدث خطأ",
+        description: "فشل في بدء عملية ربط Google Calendar",
+        variant: "destructive",
+      });
+    }
+  };
+
   const scheduleMeetingMutation = useMutation({
     mutationFn: async (data: { title: string; participantIds: string[] }) => {
       const res = await apiRequest("POST", "/api/meetings/schedule", data);
@@ -349,17 +372,19 @@ export default function Sidebar() {
             ) : calendarStatus && !calendarStatus.connected ? (
               <Alert variant="destructive" data-testid="alert-calendar-disconnected">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription className="text-right space-y-2">
+                <AlertDescription className="text-right space-y-3">
                   <p className="font-semibold">Google Calendar غير متصل</p>
                   <p className="text-sm">
-                    لجدولة اجتماعات Google Meet، يرجى ربط حساب Google Calendar الخاص بك:
+                    لجدولة اجتماعات Google Meet، يجب ربط حساب Google Calendar الخاص بك أولاً.
                   </p>
-                  <ol className="text-sm list-decimal list-inside space-y-1 mr-4">
-                    <li>انقر على "Tools" في القائمة اليسرى</li>
-                    <li>ابحث عن "Google Calendar" واختر "Connect"</li>
-                    <li>اتبع التعليمات لربط حسابك</li>
-                    <li>عد إلى هنا وحاول مرة أخرى</li>
-                  </ol>
+                  <Button
+                    onClick={handleConnectGoogleCalendar}
+                    variant="outline"
+                    className="w-full"
+                    data-testid="button-connect-google-calendar"
+                  >
+                    ربط Google Calendar
+                  </Button>
                 </AlertDescription>
               </Alert>
             ) : calendarStatus?.connected ? (
