@@ -113,6 +113,95 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Task review and rating routes
+  app.put("/api/tasks/:id/submit-review", requireAuth, async (req, res) => {
+    try {
+      // First fetch the task to verify ownership
+      const task = await storage.getTask(req.params.id);
+      if (!task) {
+        return res.status(404).json({ message: "المهمة غير موجودة" });
+      }
+      
+      // Check if user is authorized (must be assignee or creator)
+      if (task.assignedTo !== req.user!.id && task.createdBy !== req.user!.id) {
+        return res.status(403).json({ message: "غير مصرح لك بتقديم هذه المهمة للمراجعة" });
+      }
+      
+      const updatedTask = await storage.updateTask(req.params.id, { status: 'under_review' });
+      
+      // Notify the task creator/admin
+      if (task.createdBy && task.createdBy !== req.user!.id) {
+        await storage.createNotification(
+          task.createdBy,
+          "مهمة جاهزة للمراجعة",
+          `المهمة "${task.title}" جاهزة للمراجعة`,
+          "info"
+        );
+      }
+      
+      res.json(updatedTask);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تقديم المهمة للمراجعة" });
+    }
+  });
+
+  app.put("/api/tasks/:id/approve-review", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const task = await storage.approveTaskReview(req.params.id, req.user!.id);
+      if (!task) {
+        return res.status(404).json({ message: "المهمة غير موجودة" });
+      }
+      
+      // Notify the assignee
+      if (task.assignedTo) {
+        await storage.createNotification(
+          task.assignedTo,
+          "تمت الموافقة على المهمة",
+          `تمت الموافقة على مهمتك "${task.title}" وتم إكمالها بنجاح`,
+          "success"
+        );
+      }
+      
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في الموافقة على المهمة" });
+    }
+  });
+
+  app.put("/api/tasks/:id/rate", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const { rating } = req.body;
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "يجب أن يكون التقييم بين 1 و 5" });
+      }
+      
+      // Fetch task to check if already rated (idempotency check)
+      const existingTask = await storage.getTask(req.params.id);
+      if (!existingTask) {
+        return res.status(404).json({ message: "المهمة غير موجودة" });
+      }
+      
+      if (existingTask.performanceRating) {
+        return res.status(400).json({ message: "تم تقييم هذه المهمة مسبقاً" });
+      }
+      
+      const task = await storage.rateTask(req.params.id, rating, req.user!.id);
+      
+      // Notify the assignee about the rating
+      if (task.assignedTo) {
+        await storage.createNotification(
+          task.assignedTo,
+          "تم تقييم مهمتك",
+          `تم تقييم مهمتك "${task.title}" بـ ${rating} نقاط`,
+          "info"
+        );
+      }
+      
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تقييم المهمة" });
+    }
+  });
   // AUX Session routes
   app.post("/api/aux/start", requireAuth, async (req, res) => {
     try {
@@ -362,6 +451,68 @@ export function registerRoutes(app: Express): Server {
       res.json(leaveRequest);
     } catch (error) {
       res.status(500).json({ message: "حدث خطأ في تحديث طلب الإجازة" });
+    }
+  });
+
+  // Salary Advance Request routes
+  app.post("/api/salary-advances", requireAuth, async (req, res) => {
+    try {
+      const advanceRequest = await storage.createSalaryAdvanceRequest({
+        userId: req.user!.id,
+        amount: req.body.amount,
+        reason: req.body.reason,
+        repaymentDate: req.body.repaymentDate ? new Date(req.body.repaymentDate) : null,
+      });
+      
+      res.status(201).json(advanceRequest);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إنشاء طلب السلفة" });
+    }
+  });
+
+  app.get("/api/salary-advances/pending", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const requests = await storage.getPendingSalaryAdvanceRequests();
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب طلبات السلف" });
+    }
+  });
+
+  app.get("/api/salary-advances/user", requireAuth, async (req, res) => {
+    try {
+      const requests = await storage.getUserSalaryAdvanceRequests(req.user!.id);
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب طلبات السلف" });
+    }
+  });
+
+  app.put("/api/salary-advances/:id", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const updates = {
+        ...req.body,
+        approvedBy: req.user!.id,
+        approvedAt: new Date(),
+      };
+      
+      const advanceRequest = await storage.updateSalaryAdvanceRequest(req.params.id, updates);
+      if (!advanceRequest) {
+        return res.status(404).json({ message: "طلب السلفة غير موجود" });
+      }
+      
+      // Notify employee
+      const statusText = advanceRequest.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
+      await storage.createNotification(
+        advanceRequest.userId,
+        "تحديث طلب السلفة",
+        `${statusText} طلب السلفة الخاص بك`,
+        advanceRequest.status === 'approved' ? 'success' : 'error'
+      );
+      
+      res.json(advanceRequest);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب السلفة" });
     }
   });
 

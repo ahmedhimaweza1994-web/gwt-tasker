@@ -4,6 +4,7 @@ import {
   tasks,
   auxSessions,
   leaveRequests,
+  salaryAdvanceRequests,
   taskNotes,
   taskCollaborators,
   notifications,
@@ -16,9 +17,12 @@ import {
   type InsertAuxSession,
   type LeaveRequest,
   type InsertLeaveRequest,
+  type SalaryAdvanceRequest,
+  type InsertSalaryAdvanceRequest,
   type TaskNote,
   type Notification,
-  type Shift
+  type Shift,
+  advanceStatusEnum
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, isNull, count, sql, gte, lte } from "drizzle-orm";
@@ -45,6 +49,8 @@ export interface IStorage {
   updateTask(id: string, updates: Partial<Task>): Promise<Task | undefined>;
   deleteTask(id: string): Promise<boolean>;
   getAllTasks(): Promise<Task[]>;
+  rateTask(taskId: string, rating: number, ratedBy: string): Promise<Task>;
+  approveTaskReview(taskId: string, approverId: string): Promise<Task>;
  
   // Task Collaborators
   addTaskCollaborator(taskId: string, userId: string): Promise<void>;
@@ -70,6 +76,12 @@ export interface IStorage {
   getPendingLeaveRequests(): Promise<(LeaveRequest & { user: User })[]>;
   getAllLeaveRequests(): Promise<LeaveRequest[]>;
   updateLeaveRequest(id: string, updates: Partial<LeaveRequest>): Promise<LeaveRequest | undefined>;
+ 
+  // Salary Advance Requests
+  createSalaryAdvanceRequest(request: InsertSalaryAdvanceRequest): Promise<SalaryAdvanceRequest>;
+  getUserSalaryAdvanceRequests(userId: string): Promise<SalaryAdvanceRequest[]>;
+  getPendingSalaryAdvanceRequests(): Promise<(SalaryAdvanceRequest & { user: User })[]>;
+  updateSalaryAdvanceRequest(id: string, updates: Partial<SalaryAdvanceRequest>): Promise<SalaryAdvanceRequest | undefined>;
  
   // Notifications
   createNotification(userId: string, title: string, message: string, type: string): Promise<Notification>;
@@ -132,16 +144,13 @@ export class DatabaseStorage implements IStorage {
   // Tasks
   async createTask(task: InsertTask): Promise<Task> {
     console.log('Raw task data:', task);
-    const now = new Date();
     const fixedTask = {
       ...task,
-      createdAt: task.createdAt ? new Date(task.createdAt) : now,
-      updatedAt: task.updatedAt ? new Date(task.updatedAt) : now,
       dueDate: task.dueDate ? new Date(task.dueDate) : null,
       companyName: task.companyName || null,
-    };
+    } as typeof tasks.$inferInsert;
     console.log('Fixed task data:', fixedTask);
-    const [createdTask] = await db.insert(tasks).values([fixedTask]).returning();
+    const [createdTask] = await db.insert(tasks).values(fixedTask).returning();
     return createdTask;
   }
 
@@ -165,12 +174,15 @@ export class DatabaseStorage implements IStorage {
         completedAt: tasks.completedAt,
         estimatedHours: tasks.estimatedHours,
         actualHours: tasks.actualHours,
+        performanceRating: tasks.performanceRating,
+        ratedBy: tasks.ratedBy,
+        ratedAt: tasks.ratedAt,
         tags: tasks.tags,
         attachments: tasks.attachments,
         createdAt: tasks.createdAt,
         updatedAt: tasks.updatedAt,
-        createdByUser: users, // Include creator user data
-        assignedToUser: users, // Include assignee user data
+        createdByUser: users,
+        assignedToUser: users,
       })
       .from(tasks)
       .leftJoin(users, eq(tasks.createdBy, users.id))
@@ -193,12 +205,15 @@ export class DatabaseStorage implements IStorage {
         completedAt: tasks.completedAt,
         estimatedHours: tasks.estimatedHours,
         actualHours: tasks.actualHours,
+        performanceRating: tasks.performanceRating,
+        ratedBy: tasks.ratedBy,
+        ratedAt: tasks.ratedAt,
         tags: tasks.tags,
         attachments: tasks.attachments,
         createdAt: tasks.createdAt,
         updatedAt: tasks.updatedAt,
-        createdByUser: users, // Include creator user data
-        assignedToUser: users, // Include assignee user data
+        createdByUser: users,
+        assignedToUser: users,
       })
       .from(tasks)
       .leftJoin(users, eq(tasks.assignedTo, users.id))
@@ -242,16 +257,69 @@ export class DatabaseStorage implements IStorage {
         completedAt: tasks.completedAt,
         estimatedHours: tasks.estimatedHours,
         actualHours: tasks.actualHours,
+        performanceRating: tasks.performanceRating,
+        ratedBy: tasks.ratedBy,
+        ratedAt: tasks.ratedAt,
         tags: tasks.tags,
         attachments: tasks.attachments,
         createdAt: tasks.createdAt,
         updatedAt: tasks.updatedAt,
-        createdByUser: users, // Include creator user data
-        assignedToUser: users, // Include assignee user data
+        createdByUser: users,
+        assignedToUser: users,
       })
       .from(tasks)
       .leftJoin(users, or(eq(tasks.createdBy, users.id), eq(tasks.assignedTo, users.id)))
       .orderBy(desc(tasks.createdAt));
+  }
+
+  async rateTask(taskId: string, rating: number, ratedBy: string): Promise<Task> {
+    const [task] = await db
+      .update(tasks)
+      .set({
+        performanceRating: rating,
+        ratedBy,
+        ratedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(tasks.id, taskId))
+      .returning();
+    
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    if (task.assignedTo) {
+      await db
+        .update(users)
+        .set({
+          totalPoints: sql`total_points + ${rating}`,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, task.assignedTo));
+    }
+
+    return task;
+  }
+
+  async approveTaskReview(taskId: string, approverId: string): Promise<Task> {
+    const [task] = await db
+      .update(tasks)
+      .set({
+        status: 'completed',
+        completedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(tasks.id, taskId),
+        eq(tasks.status, 'under_review')
+      ))
+      .returning();
+    
+    if (!task) {
+      throw new Error('Task not found or not under review');
+    }
+
+    return task;
   }
 
   // Task Collaborators
@@ -297,7 +365,6 @@ export class DatabaseStorage implements IStorage {
 
   // AUX Sessions
   async startAuxSession(session: InsertAuxSession): Promise<AuxSession> {
-    // End any existing active session for the user
     await db
       .update(auxSessions)
       .set({
@@ -308,7 +375,6 @@ export class DatabaseStorage implements IStorage {
         eq(auxSessions.userId, session.userId),
         isNull(auxSessions.endTime)
       ));
-    // Start new session
     const [newSession] = await db.insert(auxSessions).values(session).returning();
     return newSession;
   }
@@ -449,6 +515,60 @@ export class DatabaseStorage implements IStorage {
       .update(leaveRequests)
       .set(fixedUpdates)
       .where(eq(leaveRequests.id, id))
+      .returning();
+    return request || undefined;
+  }
+
+  // Salary Advance Requests
+  async createSalaryAdvanceRequest(request: InsertSalaryAdvanceRequest): Promise<SalaryAdvanceRequest> {
+    const [advanceRequest] = await db.insert(salaryAdvanceRequests).values(request).returning();
+    return advanceRequest;
+  }
+
+  async getUserSalaryAdvanceRequests(userId: string): Promise<SalaryAdvanceRequest[]> {
+    return await db
+      .select()
+      .from(salaryAdvanceRequests)
+      .where(eq(salaryAdvanceRequests.userId, userId))
+      .orderBy(desc(salaryAdvanceRequests.createdAt));
+  }
+
+  async getPendingSalaryAdvanceRequests(): Promise<(SalaryAdvanceRequest & { user: User })[]> {
+    const result = await db
+      .select({
+        id: salaryAdvanceRequests.id,
+        userId: salaryAdvanceRequests.userId,
+        amount: salaryAdvanceRequests.amount,
+        reason: salaryAdvanceRequests.reason,
+        status: salaryAdvanceRequests.status,
+        approvedBy: salaryAdvanceRequests.approvedBy,
+        approvedAt: salaryAdvanceRequests.approvedAt,
+        rejectionReason: salaryAdvanceRequests.rejectionReason,
+        repaymentDate: salaryAdvanceRequests.repaymentDate,
+        createdAt: salaryAdvanceRequests.createdAt,
+        updatedAt: salaryAdvanceRequests.updatedAt,
+        user: users
+      })
+      .from(salaryAdvanceRequests)
+      .innerJoin(users, eq(salaryAdvanceRequests.userId, users.id))
+      .where(eq(salaryAdvanceRequests.status, 'pending'))
+      .orderBy(desc(salaryAdvanceRequests.createdAt));
+   
+    return result;
+  }
+
+  async updateSalaryAdvanceRequest(id: string, updates: Partial<SalaryAdvanceRequest>): Promise<SalaryAdvanceRequest | undefined> {
+    const now = new Date();
+    const fixedUpdates = {
+      ...updates,
+      updatedAt: updates.updatedAt ? new Date(updates.updatedAt) : now,
+      approvedAt: updates.approvedAt ? new Date(updates.approvedAt) : updates.approvedAt,
+      repaymentDate: updates.repaymentDate ? new Date(updates.repaymentDate) : updates.repaymentDate,
+    };
+    const [request] = await db
+      .update(salaryAdvanceRequests)
+      .set(fixedUpdates)
+      .where(eq(salaryAdvanceRequests.id, id))
       .returning();
     return request || undefined;
   }

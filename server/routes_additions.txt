@@ -1,0 +1,76 @@
+
+  // Task review and rating routes
+  app.put("/api/tasks/:id/submit-review", requireAuth, async (req, res) => {
+    try {
+      const task = await storage.updateTask(req.params.id, { status: 'under_review' });
+      if (!task) {
+        return res.status(404).json({ message: "المهمة غير موجودة" });
+      }
+      
+      // Notify the task creator/admin
+      if (task.createdBy && task.createdBy !== req.user!.id) {
+        await storage.createNotification(
+          task.createdBy,
+          "مهمة جاهزة للمراجعة",
+          `المهمة "${task.title}" جاهزة للمراجعة`,
+          "info"
+        );
+      }
+      
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تقديم المهمة للمراجعة" });
+    }
+  });
+
+  app.put("/api/tasks/:id/approve-review", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const task = await storage.approveTaskReview(req.params.id, req.user!.id);
+      if (!task) {
+        return res.status(404).json({ message: "المهمة غير موجودة" });
+      }
+      
+      // Notify the assignee
+      if (task.assignedTo) {
+        await storage.createNotification(
+          task.assignedTo,
+          "تمت الموافقة على المهمة",
+          `تمت الموافقة على مهمتك "${task.title}" وتم إكمالها بنجاح`,
+          "success"
+        );
+      }
+      
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في الموافقة على المهمة" });
+    }
+  });
+
+  app.put("/api/tasks/:id/rate", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const { rating } = req.body;
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "يجب أن يكون التقييم بين 1 و 5" });
+      }
+      
+      const task = await storage.rateTask(req.params.id, rating, req.user!.id);
+      if (!task) {
+        return res.status(404).json({ message: "المهمة غير موجودة" });
+      }
+      
+      // Notify the assignee about the rating
+      if (task.assignedTo) {
+        await storage.createNotification(
+          task.assignedTo,
+          "تم تقييم مهمتك",
+          `تم تقييم مهمتك "${task.title}" بـ ${rating} نقاط`,
+          "info"
+        );
+      }
+      
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تقييم المهمة" });
+    }
+  });
+
