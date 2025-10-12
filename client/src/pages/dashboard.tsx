@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useSidebar } from "@/contexts/sidebar-context";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
@@ -18,6 +20,7 @@ interface ProductivityStats {
 }
 export default function Dashboard() {
   const { user } = useAuth();
+  const { isCollapsed } = useSidebar();
   const { toast } = useToast();
  
   const [currentNotes, setCurrentNotes] = useState("");
@@ -220,7 +223,7 @@ export default function Dashboard() {
       <div className="flex">
         <Sidebar />
        
-        <main className="flex-1 p-6 mr-64">
+        <main className={cn("flex-1 p-6 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
           {/* Welcome Section */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground mb-2">

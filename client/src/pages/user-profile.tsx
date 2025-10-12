@@ -1,40 +1,46 @@
 import { useState } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useSidebar } from "@/contexts/sidebar-context";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   Mail,
   Calendar,
-  Camera,
   Briefcase,
-  Building,
   CheckCircle,
   Users,
   Code,
-  MessageSquare,
   Edit,
   Save,
   X,
   Phone,
   MapPin,
   Trophy,
-  Star
+  Star,
+  Target,
+  TrendingUp,
+  Clock,
+  Award,
+  Activity
 } from "lucide-react";
 
 export default function UserProfile() {
   const { id } = useParams();
   const { user: currentUser } = useAuth();
+  const { isCollapsed } = useSidebar();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>({});
@@ -109,7 +115,7 @@ export default function UserProfile() {
         <Navigation />
         <div className="flex">
           <Sidebar />
-          <main className="flex-1 mr-64 p-8 flex items-center justify-center">
+          <main className={cn("flex-1 p-8 flex items-center justify-center transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
             <p className="text-muted-foreground">جاري التحميل...</p>
           </main>
         </div>
@@ -117,85 +123,77 @@ export default function UserProfile() {
     );
   }
 
-  const completedTasks = tasks?.filter((t: any) => t.status === "done").length || 0;
+  const completedTasks = tasks?.filter((t: any) => t.status === "completed").length || 0;
   const totalTasks = tasks?.length || 0;
   const productivity = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-  
-  const recentActivities = [
-    ...(tasks?.slice(0, 2).map((task: any) => ({
-      id: task.id,
-      type: "task_completed",
-      title: task.status === "done" ? "أكمل مهمة" : "يعمل على مهمة",
-      description: task.title,
-      time: "مؤخراً",
-      icon: task.status === "done" ? CheckCircle : Code,
-      color: task.status === "done" ? "text-chart-1" : "text-primary",
-    })) || []),
-    ...(auxSessions?.slice(0, 2).map((session: any) => ({
-      id: session.id,
-      type: "aux_session",
-      title: "جلسة عمل",
-      description: session.status,
-      time: "مؤخراً",
-      icon: Users,
-      color: "text-chart-2",
-    })) || []),
-  ].slice(0, 4);
+  const pendingTasks = tasks?.filter((t: any) => t.status === "pending").length || 0;
+  const inProgressTasks = tasks?.filter((t: any) => t.status === "in-progress").length || 0;
 
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 mr-64">
-          {/* Cover Photo */}
-          <div className="relative h-64 bg-gradient-to-br from-primary via-secondary to-chart-1">
-            <div className="absolute inset-0 bg-black/20"></div>
+        <main className={cn("flex-1 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
+          {/* Modern Cover Section */}
+          <div className="relative h-48 md:h-64 bg-gradient-to-br from-purple-600 via-blue-600 to-teal-500 overflow-hidden">
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6bTAgNGMwLTIuMjEgMS43OS00IDQtNHM0IDEuNzkgNCA0LTEuNzkgNC00IDQtNC0xLjc5LTQtNHptLTIwIDRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
           </div>
 
-          <div className="container mx-auto px-6 py-0 max-w-5xl">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-0 max-w-7xl">
             {/* Profile Header */}
-            <div className="relative -mt-20 mb-8">
-              <div className="flex flex-col md:flex-row gap-6 items-start">
+            <div className="relative -mt-16 sm:-mt-20 mb-8">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start">
                 {/* Avatar */}
-                <div className="relative">
-                  <Avatar className="w-32 h-32 md:w-40 md:h-40 border-4 border-background shadow-xl">
+                <div className="relative group">
+                  <Avatar className="w-28 h-28 sm:w-32 sm:h-32 md:w-36 md:h-36 border-4 border-background shadow-2xl ring-4 ring-primary/20">
                     <AvatarImage src={profile.profilePicture} alt={profile.fullName} />
-                    <AvatarFallback className="text-2xl">
+                    <AvatarFallback className="text-3xl font-bold bg-gradient-to-br from-primary to-secondary text-white">
                       {profile.fullName?.split(" ")[0]?.charAt(0) || "م"}
                     </AvatarFallback>
                   </Avatar>
                 </div>
 
-                {/* User Info */}
-                <div className="flex-1 pt-4">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-                    <div>
-                      <h1 className="text-3xl font-bold text-foreground mb-1" data-testid="text-user-fullname">
-                        {profile.fullName}
-                      </h1>
-                      <p className="text-lg text-muted-foreground mb-3" data-testid="text-user-jobtitle">
+                {/* User Info & Actions */}
+                <div className="flex-1 bg-card rounded-xl p-4 sm:p-6 shadow-lg border border-border">
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-start gap-3 mb-2">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-foreground" data-testid="text-user-fullname">
+                          {profile.fullName}
+                        </h1>
+                        {profile.role === 'admin' && (
+                          <Badge className="bg-purple-600 hover:bg-purple-700">
+                            <Award className="w-3 h-3 mr-1" />
+                            Admin
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <p className="text-lg text-muted-foreground mb-4 flex items-center gap-2" data-testid="text-user-jobtitle">
+                        <Briefcase className="w-4 h-4" />
                         {profile.jobTitle || "لا يوجد مسمى وظيفي"}
                       </p>
 
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-4">
-                        <div className="flex items-center gap-1">
-                          <Briefcase className="w-4 h-4" />
-                          <span data-testid="text-user-department">{profile.department}</span>
+                      <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-lg">
+                          <Users className="w-4 h-4 text-primary" />
+                          <span className="font-medium" data-testid="text-user-department">{profile.department}</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Mail className="w-4 h-4" />
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-lg">
+                          <Mail className="w-4 h-4 text-primary" />
                           <span data-testid="text-user-email">{profile.email}</span>
                         </div>
                         {profile.phoneNumber && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="w-4 h-4" />
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-lg">
+                            <Phone className="w-4 h-4 text-primary" />
                             <span data-testid="text-user-phone">{profile.phoneNumber}</span>
                           </div>
                         )}
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          <span>انضم في {new Date(profile.hireDate).toLocaleDateString("ar-SA", { year: "numeric", month: "long" })}</span>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-lg">
+                          <Calendar className="w-4 h-4 text-primary" />
+                          <span>انضم {new Date(profile.hireDate).toLocaleDateString("ar-SA", { year: "numeric", month: "long" })}</span>
                         </div>
                       </div>
                     </div>
@@ -204,9 +202,9 @@ export default function UserProfile() {
                     {isOwnProfile && (
                       <div className="flex gap-2">
                         {!isEditing ? (
-                          <Button onClick={handleEditClick} data-testid="button-edit-profile">
+                          <Button onClick={handleEditClick} data-testid="button-edit-profile" className="shadow-lg">
                             <Edit className="w-4 h-4 ml-2" />
-                            تعديل الملف الشخصي
+                            تعديل الملف
                           </Button>
                         ) : (
                           <>
@@ -214,6 +212,7 @@ export default function UserProfile() {
                               onClick={handleSave}
                               disabled={updateProfileMutation.isPending}
                               data-testid="button-save-profile"
+                              className="shadow-lg"
                             >
                               <Save className="w-4 h-4 ml-2" />
                               حفظ
@@ -227,43 +226,217 @@ export default function UserProfile() {
                       </div>
                     )}
                   </div>
-
-                  {/* Stats */}
-                  {isOwnProfile && (
-                    <div className="grid grid-cols-4 gap-4 mt-6">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-foreground" data-testid="text-total-tasks">{totalTasks}</p>
-                        <p className="text-sm text-muted-foreground">مهام</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-foreground" data-testid="text-completed-tasks">{completedTasks}</p>
-                        <p className="text-sm text-muted-foreground">مهمة مكتملة</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-foreground" data-testid="text-productivity-percentage">{productivity}%</p>
-                        <p className="text-sm text-muted-foreground">نسبة الإنجاز</p>
-                      </div>
-                      <div className="text-center">
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                          <Trophy className="w-5 h-5 text-yellow-500 animate-pulse" />
-                          <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-500" data-testid="text-total-points">{profile.totalPoints || 0}</p>
-                        </div>
-                        <p className="text-sm text-muted-foreground">نقاط المكافأة</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
 
-            {/* Profile Content */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-12">
-              {/* Left Sidebar */}
-              <div className="space-y-6">
-                {/* About */}
+            {/* Stats Grid */}
+            {isOwnProfile && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">إجمالي المهام</p>
+                        <p className="text-3xl font-bold text-foreground" data-testid="text-total-tasks">{totalTasks}</p>
+                      </div>
+                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                        <Target className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">مهام مكتملة</p>
+                        <p className="text-3xl font-bold text-foreground" data-testid="text-completed-tasks">{completedTasks}</p>
+                      </div>
+                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+                        <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-purple-500 hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">نسبة الإنجاز</p>
+                        <p className="text-3xl font-bold text-foreground" data-testid="text-productivity-percentage">{productivity}%</p>
+                      </div>
+                      <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">نقاط المكافأة</p>
+                        <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-500" data-testid="text-total-points">{profile.totalPoints || 0}</p>
+                      </div>
+                      <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
+                        <Trophy className="w-6 h-6 text-yellow-600 dark:text-yellow-500 animate-pulse" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Tabbed Content */}
+            <Tabs defaultValue="overview" className="pb-12">
+              <TabsList className="grid w-full max-w-md grid-cols-3 mb-6">
+                <TabsTrigger value="overview" className="gap-2">
+                  <Activity className="w-4 h-4" />
+                  نظرة عامة
+                </TabsTrigger>
+                <TabsTrigger value="tasks" className="gap-2">
+                  <Target className="w-4 h-4" />
+                  المهام
+                </TabsTrigger>
+                <TabsTrigger value="about" className="gap-2">
+                  <Users className="w-4 h-4" />
+                  عن المستخدم
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Overview Tab */}
+              <TabsContent value="overview" className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Task Breakdown */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="w-5 h-5 text-primary" />
+                        توزيع المهام
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center">
+                            <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <span className="font-medium">مهام معلقة</span>
+                        </div>
+                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">{pendingTasks}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/40 rounded-lg flex items-center justify-center">
+                            <Code className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                          </div>
+                          <span className="font-medium">مهام جارية</span>
+                        </div>
+                        <span className="text-xl font-bold text-orange-600 dark:text-orange-400">{inProgressTasks}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-green-100 dark:bg-green-900/40 rounded-lg flex items-center justify-center">
+                            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                          </div>
+                          <span className="font-medium">مهام مكتملة</span>
+                        </div>
+                        <span className="text-xl font-bold text-green-600 dark:text-green-400">{completedTasks}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Performance Stats */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-primary" />
+                        الأداء والإحصائيات
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">معدل الإنجاز</span>
+                          <span className="text-sm font-bold text-primary">{productivity}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-500"
+                            style={{ width: `${productivity}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-4">
+                        <div className="text-center p-4 bg-muted/50 rounded-lg">
+                          <Star className="w-6 h-6 text-yellow-500 mx-auto mb-2" />
+                          <p className="text-2xl font-bold text-foreground">{profile.totalPoints || 0}</p>
+                          <p className="text-xs text-muted-foreground">نقاط الأداء</p>
+                        </div>
+                        <div className="text-center p-4 bg-muted/50 rounded-lg">
+                          <Award className="w-6 h-6 text-purple-500 mx-auto mb-2" />
+                          <p className="text-2xl font-bold text-foreground">A+</p>
+                          <p className="text-xs text-muted-foreground">التقييم</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* Tasks Tab */}
+              <TabsContent value="tasks" className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>عن المستخدم</CardTitle>
+                    <CardTitle>المهام الأخيرة</CardTitle>
+                    <CardDescription>آخر المهام التي تم العمل عليها</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {tasks && tasks.length > 0 ? (
+                      <div className="space-y-3">
+                        {tasks.slice(0, 5).map((task: any) => (
+                          <div key={task.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center gap-3">
+                              {task.status === "completed" ? (
+                                <CheckCircle className="w-5 h-5 text-green-500" />
+                              ) : task.status === "in-progress" ? (
+                                <Code className="w-5 h-5 text-orange-500" />
+                              ) : (
+                                <Clock className="w-5 h-5 text-blue-500" />
+                              )}
+                              <div>
+                                <p className="font-medium">{task.title}</p>
+                                <p className="text-sm text-muted-foreground">{task.description}</p>
+                              </div>
+                            </div>
+                            <Badge variant={task.status === "completed" ? "default" : "secondary"}>
+                              {task.status === "completed" ? "مكتملة" : task.status === "in-progress" ? "جارية" : "معلقة"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <Target className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">لا توجد مهام حالياً</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* About Tab */}
+              <TabsContent value="about" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>المعلومات الشخصية</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {isEditing ? (
@@ -296,16 +469,6 @@ export default function UserProfile() {
                           />
                         </div>
                         <div>
-                          <Label htmlFor="bio">نبذة</Label>
-                          <Textarea
-                            id="bio"
-                            value={editData.bio || ""}
-                            onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
-                            rows={4}
-                            data-testid="input-edit-bio"
-                          />
-                        </div>
-                        <div>
                           <Label htmlFor="phoneNumber">رقم الهاتف</Label>
                           <Input
                             id="phoneNumber"
@@ -324,106 +487,62 @@ export default function UserProfile() {
                           />
                         </div>
                         <div>
-                          <Label htmlFor="hireDate">تاريخ التعيين</Label>
-                          <Input
-                            id="hireDate"
-                            type="date"
-                            value={editData.hireDate ? new Date(editData.hireDate).toISOString().split('T')[0] : ""}
-                            onChange={(e) => setEditData({ ...editData, hireDate: e.target.value })}
-                            data-testid="input-edit-hiredate"
+                          <Label htmlFor="bio">نبذة عني</Label>
+                          <Textarea
+                            id="bio"
+                            rows={4}
+                            value={editData.bio || ""}
+                            onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
+                            placeholder="اكتب نبذة مختصرة عنك..."
+                            data-testid="input-edit-bio"
                           />
                         </div>
                       </div>
                     ) : (
-                      <>
-                        <p className="text-muted-foreground leading-relaxed" data-testid="text-user-bio">
-                          {profile.bio || "لا توجد نبذة متاحة"}
-                        </p>
-
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-3">
-                            <Briefcase className="w-4 h-4 text-primary" />
-                            <span className="text-sm text-foreground">{profile.jobTitle || "لا يوجد مسمى وظيفي"}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Building className="w-4 h-4 text-primary" />
-                            <span className="text-sm text-foreground">{profile.department}</span>
-                          </div>
-                          {profile.address && (
-                            <div className="flex items-center gap-3">
-                              <MapPin className="w-4 h-4 text-primary" />
-                              <span className="text-sm text-foreground">{profile.address}</span>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                            <Briefcase className="w-5 h-5 text-primary mt-0.5" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">المسمى الوظيفي</p>
+                              <p className="font-medium">{profile.jobTitle || "غير محدد"}</p>
                             </div>
-                          )}
+                          </div>
+                          <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                            <Users className="w-5 h-5 text-primary mt-0.5" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">القسم</p>
+                              <p className="font-medium">{profile.department}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                            <Phone className="w-5 h-5 text-primary mt-0.5" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">رقم الهاتف</p>
+                              <p className="font-medium">{profile.phoneNumber || "غير محدد"}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                            <MapPin className="w-5 h-5 text-primary mt-0.5" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">العنوان</p>
+                              <p className="font-medium">{profile.address || "غير محدد"}</p>
+                            </div>
+                          </div>
                         </div>
-                      </>
+
+                        {profile.bio && (
+                          <div className="p-4 bg-muted/50 rounded-lg">
+                            <p className="text-sm text-muted-foreground mb-2">نبذة عني</p>
+                            <p className="text-foreground leading-relaxed">{profile.bio}</p>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
-              </div>
-
-              {/* Main Content */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Active Tasks */}
-                {isOwnProfile && tasks && tasks.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>المهام النشطة</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {tasks.slice(0, 3).map((task: any) => (
-                        <div key={task.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <h4 className="font-semibold text-foreground mb-1">{task.title}</h4>
-                              <p className="text-sm text-muted-foreground">{task.description || "لا يوجد وصف"}</p>
-                            </div>
-                            <Badge variant={task.status === "done" ? "default" : "secondary"}>
-                              {task.status === "todo" ? "قيد الانتظار" : task.status === "in-progress" ? "قيد التنفيذ" : "مكتمل"}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Recent Activity */}
-                {isOwnProfile && recentActivities.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>النشاط الأخير</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {recentActivities.map((activity) => {
-                          const Icon = activity.icon;
-                          return (
-                            <div key={activity.id} className="flex gap-4">
-                              <div className="flex-shrink-0 mt-1">
-                                <div className={`w-8 h-8 rounded-full bg-muted flex items-center justify-center`}>
-                                  <Icon className={`w-4 h-4 ${activity.color}`} />
-                                </div>
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm text-foreground">
-                                  <span className="font-semibold">{activity.title}</span>
-                                  {" "}
-                                  {activity.description}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {activity.time}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </div>
+              </TabsContent>
+            </Tabs>
           </div>
         </main>
       </div>

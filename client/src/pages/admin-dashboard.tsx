@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useSidebar } from "@/contexts/sidebar-context";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
@@ -31,6 +33,7 @@ interface ActiveEmployee extends AuxSession {
 }
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { isCollapsed } = useSidebar();
  
   // Check if user has admin/sub-admin role
   if (!user || (user.role !== 'admin' && user.role !== 'sub-admin')) {
@@ -114,7 +117,7 @@ export default function AdminDashboard() {
       <div className="flex">
         <Sidebar />
        
-        <main className="flex-1 p-6 mr-64">
+        <main className={cn("flex-1 p-6 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div>

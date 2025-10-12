@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useSidebar } from "@/contexts/sidebar-context";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
@@ -27,6 +29,7 @@ import type { LeaveRequest, SalaryAdvanceRequest } from "@shared/schema";
 
 export default function MyRequests() {
   const { user } = useAuth();
+  const { isCollapsed } = useSidebar();
   const { toast } = useToast();
   
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);

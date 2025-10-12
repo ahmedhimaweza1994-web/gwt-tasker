@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { useSidebar } from "@/contexts/sidebar-context";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
@@ -61,6 +63,7 @@ interface ChatMessage {
 
 export default function Chat() {
   const { user } = useAuth();
+  const { isCollapsed } = useSidebar();
   const { toast } = useToast();
   const [selectedRoom, setSelectedRoom] = useState<ChatRoom | null>(null);
   const [messageText, setMessageText] = useState("");

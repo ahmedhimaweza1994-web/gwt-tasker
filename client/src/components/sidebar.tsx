@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
+import { useSidebar } from "@/contexts/sidebar-context";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -36,16 +37,27 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Sidebar() {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isCollapsed, setIsCollapsed } = useSidebar();
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
+  const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [meetingTitle, setMeetingTitle] = useState("");
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    priority: "medium",
+    assignedTo: "",
+    dueDate: "",
+    companyName: "",
+  });
   const { toast } = useToast();
 
   // Fetch user tasks for badge count
@@ -233,6 +245,52 @@ export default function Sidebar() {
     });
   };
 
+  const { data: users = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: async (taskData: any) => {
+      const res = await apiRequest("POST", "/api/tasks", taskData);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/assigned"] });
+      setShowTaskDialog(false);
+      setNewTask({
+        title: "",
+        description: "",
+        priority: "medium",
+        assignedTo: "",
+        dueDate: "",
+        companyName: "",
+      });
+      toast({
+        title: "تم إنشاء المهمة بنجاح",
+        description: "تمت إضافة المهمة الجديدة",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "خطأ في إنشاء المهمة",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCreateTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    createTaskMutation.mutate({
+      ...newTask,
+      dueDate: newTask.dueDate ? new Date(newTask.dueDate) : undefined,
+      assignedTo: newTask.assignedTo || undefined,
+      companyName: newTask.companyName || undefined,
+    });
+  };
+
   return (
     <div className={cn(
       "fixed right-0 top-16 z-40 h-[calc(100vh-4rem)] bg-card border-l border-border transition-all duration-300",
@@ -297,21 +355,11 @@ export default function Sidebar() {
                   variant="ghost" 
                   size="sm" 
                   className="w-full justify-start gap-3" 
-                  onClick={() => setLocation('/tasks')}
+                  onClick={() => setShowTaskDialog(true)}
                   data-testid="sidebar-quick-task"
                 >
                   <CheckSquare className="h-4 w-4" />
                   إضافة مهمة
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="w-full justify-start gap-3" 
-                  onClick={() => setLocation('/reports')}
-                  data-testid="sidebar-quick-report"
-                >
-                  <FileText className="h-4 w-4" />
-                  تقرير سريع
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -489,6 +537,109 @@ export default function Sidebar() {
               إلغاء
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Task Dialog */}
+      <Dialog open={showTaskDialog} onOpenChange={setShowTaskDialog}>
+        <DialogContent className="sm:max-w-[500px]" dir="rtl" data-testid="dialog-create-task">
+          <DialogHeader>
+            <DialogTitle className="text-right">إنشاء مهمة جديدة</DialogTitle>
+          </DialogHeader>
+          
+          <form onSubmit={handleCreateTask} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="task-title">عنوان المهمة *</Label>
+              <Input
+                id="task-title"
+                placeholder="أدخل عنوان المهمة"
+                value={newTask.title}
+                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                required
+                data-testid="input-task-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-description">الوصف</Label>
+              <Textarea
+                id="task-description"
+                placeholder="وصف تفصيلي للمهمة..."
+                value={newTask.description}
+                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                rows={3}
+                data-testid="input-task-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-company">اسم الشركة</Label>
+              <Input
+                id="task-company"
+                placeholder="أدخل اسم الشركة (اختياري)"
+                value={newTask.companyName}
+                onChange={(e) => setNewTask({ ...newTask, companyName: e.target.value })}
+                data-testid="input-task-company"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="task-priority">الأولوية</Label>
+                <Select
+                  value={newTask.priority}
+                  onValueChange={(value) => setNewTask({ ...newTask, priority: value })}
+                >
+                  <SelectTrigger id="task-priority" data-testid="select-task-priority">
+                    <SelectValue placeholder="اختر الأولوية" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">منخفضة</SelectItem>
+                    <SelectItem value="medium">متوسطة</SelectItem>
+                    <SelectItem value="high">عالية</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task-due-date">تاريخ الاستحقاق</Label>
+                <Input
+                  id="task-due-date"
+                  type="date"
+                  value={newTask.dueDate}
+                  onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                  data-testid="input-task-due-date"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-assigned-to">تعيين إلى</Label>
+              <Select
+                value={newTask.assignedTo}
+                onValueChange={(value) => setNewTask({ ...newTask, assignedTo: value })}
+              >
+                <SelectTrigger id="task-assigned-to" data-testid="select-task-assigned-to">
+                  <SelectValue placeholder="اختر موظف (اختياري)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.fullName} - {u.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowTaskDialog(false)}
+                data-testid="button-cancel-task"
+              >
+                إلغاء
+              </Button>
+              <Button type="submit" data-testid="button-submit-task">
+                إنشاء المهمة
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

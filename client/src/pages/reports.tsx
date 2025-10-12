@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useSidebar } from "@/contexts/sidebar-context";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
@@ -22,6 +24,7 @@ import {
 
 export default function Reports() {
   const { user } = useAuth();
+  const { isCollapsed } = useSidebar();
 
   const [timeRange, setTimeRange] = useState("7");
   const [departmentFilter, setDepartmentFilter] = useState("all");
@@ -139,7 +142,7 @@ export default function Reports() {
       <div className="flex">
         <Sidebar />
 
-        <main className="flex-1 p-6 mr-64">
+        <main className={cn("flex-1 p-6 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
