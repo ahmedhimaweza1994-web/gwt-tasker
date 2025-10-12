@@ -6,6 +6,16 @@ GWT Task Management is a comprehensive Arabic-language task and employee managem
 
 ## Recent Changes
 
+### October 12, 2025 - Dark Mode & RTL Fixes
+- **Dark Mode Improvements** - Fixed text visibility issues across the application in dark mode
+  - Navigation bar: Updated background from hardcoded white to theme-aware `bg-background dark:bg-background`
+  - Sidebar: Added explicit dark mode text classes (`dark:text-white`, `dark:text-gray-400`) for menu items and user info
+  - All components now properly support dark mode with visible text
+- **RTL Alignment** - Added `text-right` alignment to Arabic text elements in dashboard and cards
+- **Profile Upload Fix** - Backend now properly saves profile pictures and cover images
+  - Updated `PUT /api/profile` to accept and persist `profilePicture` and `coverImage` fields
+  - Updated `GET /api/profile/:id` to return both profile and cover images
+
 ### October 11, 2025 - Google Calendar OAuth 2.0 Integration
 - **Migrated from Replit-specific connector to portable OAuth 2.0** - Replaced Replit's Google Calendar connector with standard OAuth 2.0 flow
 - **Database**: Added `google_calendar_tokens` table to store user OAuth tokens (access_token, refresh_token, expires_at)
