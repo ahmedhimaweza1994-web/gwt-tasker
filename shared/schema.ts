@@ -24,6 +24,7 @@ export const users = pgTable("users", {
   department: text("department").notNull(),
   role: roleEnum("role").notNull().default('employee'),
   profilePicture: text("profile_picture"),
+  coverImage: text("cover_image"),
   bio: text("bio"),
   jobTitle: text("job_title"),
   phoneNumber: text("phone_number"),

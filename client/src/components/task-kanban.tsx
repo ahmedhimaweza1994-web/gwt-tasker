@@ -171,10 +171,9 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
   const TaskCard = ({ task }: { task: Task }) => (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={false}
       exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ duration: 0.2 }}
+      transition={{ layout: { duration: 0.2 } }}
       className="group"
     >
       <Card className="p-3 cursor-pointer hover:shadow-md transition-shadow border-border/50 hover:border-primary/30">

@@ -21,11 +21,14 @@ import {
   CheckCircle, 
   XCircle, 
   Clock,
-  CalendarDays
+  CalendarDays,
+  TrendingUp,
+  AlertTriangle
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { LeaveRequest, SalaryAdvanceRequest } from "@shared/schema";
+import { motion } from "framer-motion";
 
 export default function MyRequests() {
   const { user } = useAuth();
@@ -165,19 +168,127 @@ export default function MyRequests() {
     emergency: 'إجازة طارئة',
   };
 
+  const totalLeaveRequests = myLeaveRequests.length;
+  const approvedLeaveRequests = myLeaveRequests.filter(r => r.status === 'approved').length;
+  const pendingLeaveRequests = myLeaveRequests.filter(r => r.status === 'pending').length;
+  const totalSalaryRequests = mySalaryAdvanceRequests.length;
+  const approvedSalaryRequests = mySalaryAdvanceRequests.filter(r => r.status === 'approved').length;
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: { duration: 0.5 }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 mr-64 p-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold mb-2">طلباتي</h1>
-              <p className="text-muted-foreground">
+        <main className={cn("flex-1 p-6 lg:p-10 transition-all duration-300", isCollapsed ? "lg:mr-[90px]" : "lg:mr-64")}>
+          <div className="container mx-auto max-w-7xl">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-3">
+                طلباتي
+              </h1>
+              <p className="text-muted-foreground text-lg">
                 يمكنك هنا تقديم طلبات الإجازات والسلف المالية ومتابعة حالتها
               </p>
-            </div>
+            </motion.div>
+
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+            >
+              <motion.div variants={itemVariants}>
+                <Card className="border-t-4 border-t-primary hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      إجمالي طلبات الإجازة
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-primary">{totalLeaveRequests}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {approvedLeaveRequests} موافق عليها
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Card className="border-t-4 border-t-yellow-500 hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      طلبات قيد المراجعة
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-500">{pendingLeaveRequests}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      إجازات في انتظار الموافقة
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Card className="border-t-4 border-t-accent hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <DollarSign className="w-4 h-4" />
+                      طلبات السلف
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-accent">{totalSalaryRequests}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {approvedSalaryRequests} موافق عليها
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Card className="border-t-4 border-t-secondary hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      معدل الموافقة
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-secondary">
+                      {totalLeaveRequests > 0 ? Math.round((approvedLeaveRequests / totalLeaveRequests) * 100) : 0}%
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      من طلبات الإجازة
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </motion.div>
 
             <Tabs defaultValue="leave" className="w-full">
               <TabsList className="grid w-full max-w-md grid-cols-2">
@@ -280,39 +391,63 @@ export default function MyRequests() {
 
                 <div className="grid gap-4">
                   {myLeaveRequests.length === 0 ? (
-                    <Card>
-                      <CardContent className="flex flex-col items-center justify-center py-12">
-                        <CalendarDays className="w-12 h-12 text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground">لا توجد طلبات إجازات</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    myLeaveRequests.map((request) => (
-                      <Card key={request.id} data-testid={`leave-request-${request.id}`}>
-                        <CardHeader>
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <CardTitle>{leaveTypeLabels[request.type]}</CardTitle>
-                              <CardDescription>
-                                {new Date(request.startDate).toLocaleDateString('ar-SA')} - {new Date(request.endDate).toLocaleDateString('ar-SA')}
-                                {' '}({request.days} أيام)
-                              </CardDescription>
-                            </div>
-                            {getStatusBadge(request.status)}
-                          </div>
-                        </CardHeader>
-                        {request.reason && (
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground">{request.reason}</p>
-                            {request.status === 'rejected' && request.rejectionReason && (
-                              <div className="mt-3 p-3 bg-destructive/10 rounded-md">
-                                <p className="text-sm font-medium">سبب الرفض:</p>
-                                <p className="text-sm">{request.rejectionReason}</p>
-                              </div>
-                            )}
-                          </CardContent>
-                        )}
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card>
+                        <CardContent className="flex flex-col items-center justify-center py-12">
+                          <CalendarDays className="w-12 h-12 text-muted-foreground mb-4" />
+                          <p className="text-muted-foreground">لا توجد طلبات إجازات</p>
+                        </CardContent>
                       </Card>
+                    </motion.div>
+                  ) : (
+                    myLeaveRequests.map((request, index) => (
+                      <motion.div
+                        key={request.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                      >
+                        <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-primary/50" data-testid={`leave-request-${request.id}`}>
+                          <CardHeader>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <CardTitle className="flex items-center gap-2">
+                                  <Calendar className="w-5 h-5 text-primary" />
+                                  {leaveTypeLabels[request.type]}
+                                </CardTitle>
+                                <CardDescription className="mt-2">
+                                  {new Date(request.startDate).toLocaleDateString('ar-SA')} - {new Date(request.endDate).toLocaleDateString('ar-SA')}
+                                  {' '}({request.days} أيام)
+                                </CardDescription>
+                              </div>
+                              {getStatusBadge(request.status)}
+                            </div>
+                          </CardHeader>
+                          {request.reason && (
+                            <CardContent>
+                              <p className="text-sm text-muted-foreground">{request.reason}</p>
+                              {request.status === 'rejected' && request.rejectionReason && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  className="mt-3 p-3 bg-destructive/10 rounded-md border border-destructive/20"
+                                >
+                                  <p className="text-sm font-medium flex items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    سبب الرفض:
+                                  </p>
+                                  <p className="text-sm mt-1">{request.rejectionReason}</p>
+                                </motion.div>
+                              )}
+                            </CardContent>
+                          )}
+                        </Card>
+                      </motion.div>
                     ))
                   )}
                 </div>
@@ -390,38 +525,62 @@ export default function MyRequests() {
 
                 <div className="grid gap-4">
                   {mySalaryAdvanceRequests.length === 0 ? (
-                    <Card>
-                      <CardContent className="flex flex-col items-center justify-center py-12">
-                        <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground">لا توجد طلبات سلف</p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    mySalaryAdvanceRequests.map((request) => (
-                      <Card key={request.id} data-testid={`salary-advance-${request.id}`}>
-                        <CardHeader>
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <CardTitle>{parseFloat(request.amount).toFixed(2)} ريال</CardTitle>
-                              <CardDescription>
-                                {request.repaymentDate && `تاريخ السداد: ${new Date(request.repaymentDate).toLocaleDateString('ar-SA')}`}
-                              </CardDescription>
-                            </div>
-                            {getStatusBadge(request.status)}
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground mb-2">
-                            <strong>السبب:</strong> {request.reason}
-                          </p>
-                          {request.status === 'rejected' && request.rejectionReason && (
-                            <div className="mt-3 p-3 bg-destructive/10 rounded-md">
-                              <p className="text-sm font-medium">سبب الرفض:</p>
-                              <p className="text-sm">{request.rejectionReason}</p>
-                            </div>
-                          )}
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card>
+                        <CardContent className="flex flex-col items-center justify-center py-12">
+                          <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />
+                          <p className="text-muted-foreground">لا توجد طلبات سلف</p>
                         </CardContent>
                       </Card>
+                    </motion.div>
+                  ) : (
+                    mySalaryAdvanceRequests.map((request, index) => (
+                      <motion.div
+                        key={request.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                      >
+                        <Card className="hover:shadow-lg transition-all duration-300 border-l-4 border-l-accent/50" data-testid={`salary-advance-${request.id}`}>
+                          <CardHeader>
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <CardTitle className="flex items-center gap-2">
+                                  <DollarSign className="w-5 h-5 text-accent" />
+                                  {parseFloat(request.amount).toFixed(2)} ريال
+                                </CardTitle>
+                                <CardDescription className="mt-2">
+                                  {request.repaymentDate && `تاريخ السداد: ${new Date(request.repaymentDate).toLocaleDateString('ar-SA')}`}
+                                </CardDescription>
+                              </div>
+                              {getStatusBadge(request.status)}
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-muted-foreground mb-2">
+                              <strong>السبب:</strong> {request.reason}
+                            </p>
+                            {request.status === 'rejected' && request.rejectionReason && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                className="mt-3 p-3 bg-destructive/10 rounded-md border border-destructive/20"
+                              >
+                                <p className="text-sm font-medium flex items-center gap-2">
+                                  <AlertTriangle className="w-4 h-4" />
+                                  سبب الرفض:
+                                </p>
+                                <p className="text-sm mt-1">{request.rejectionReason}</p>
+                              </motion.div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </motion.div>
                     ))
                   )}
                 </div>

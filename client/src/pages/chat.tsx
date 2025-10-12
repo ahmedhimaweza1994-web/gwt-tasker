@@ -476,7 +476,7 @@ export default function Chat() {
       <Navigation />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 mr-64 h-screen flex bg-gradient-to-br from-background to-muted/20">
+        <main className={cn("flex-1 h-screen flex bg-gradient-to-br from-background to-muted/20 transition-all duration-300", isCollapsed ? "lg:mr-[90px]" : "lg:mr-64")}>
           {/* Sidebar with rooms */}
           <motion.div
             initial={{ x: -20, opacity: 0 }}

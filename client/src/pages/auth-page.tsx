@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "wouter";
 import { CheckCircle, Users, Clock, BarChart3, Shield } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -62,92 +63,158 @@ export default function AuthPage() {
     "الإدارة العامة"
   ];
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.2
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { x: -20, opacity: 0 },
+    visible: {
+      x: 0,
+      opacity: 1,
+      transition: { duration: 0.5 }
+    }
+  };
+
+  const features = [
+    {
+      icon: Users,
+      title: "إدارة الفرق",
+      description: "تتبع نشاط الموظفين وإدارة المهام بكفاءة عالية"
+    },
+    {
+      icon: Clock,
+      title: "تتبع الوقت الفعلي",
+      description: "مراقبة أوقات العمل والاستراحة بدقة عالية"
+    },
+    {
+      icon: BarChart3,
+      title: "تقارير وتحليلات",
+      description: "رؤى شاملة عن الأداء والإنتاجية"
+    },
+    {
+      icon: Shield,
+      title: "أمان وموثوقية",
+      description: "حماية بيانات موظفيك مع أعلى معايير الأمان"
+    }
+  ];
+
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-background">
       {/* Hero Section */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-secondary to-accent p-12 text-primary-foreground relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="relative z-10 flex flex-col justify-center">
-          <div className="mb-8">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-6">
-              <CheckCircle className="w-10 h-10" />
-            </div>
-            <h1 className="text-4xl font-bold mb-4">GWT إدارة المهام</h1>
-            <p className="text-xl opacity-90 mb-8">
+      <motion.div 
+        initial={{ x: -100, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.6 }}
+        className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-secondary to-accent p-12 text-primary-foreground relative overflow-hidden"
+      >
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6bTAgNGMwLTIuMjEgMS43OS00IDQtNHM0IDEuNzkgNCA0LTEuNzkgNC00IDQtNC0xLjc5LTQtNHptLTIwIDRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-20"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
+        
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="relative z-10 flex flex-col justify-center"
+        >
+          <motion.div variants={itemVariants} className="mb-12">
+            <motion.div 
+              whileHover={{ scale: 1.05, rotate: 5 }}
+              className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-3xl flex items-center justify-center mb-6 shadow-2xl"
+            >
+              <CheckCircle className="w-12 h-12" />
+            </motion.div>
+            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white to-white/80 bg-clip-text">
+              GWT إدارة المهام
+            </h1>
+            <p className="text-xl opacity-90 leading-relaxed">
               نظام شامل لإدارة المهام والموظفين مع تتبع الوقت الفعلي
             </p>
-          </div>
+          </motion.div>
 
           <div className="space-y-6">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Users className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">إدارة الفرق</h3>
-                <p className="text-sm opacity-75">تتبع نشاط الموظفين وإدارة المهام بكفاءة عالية</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Clock className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">تتبع الوقت الفعلي</h3>
-                <p className="text-sm opacity-75">مراقبة أوقات العمل والاستراحة بدقة عالية</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                <BarChart3 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">تقارير وتحليلات</h3>
-                <p className="text-sm opacity-75">رؤى شاملة عن الأداء والإنتاجية</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Shield className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">أمان وموثوقية</h3>
-                <p className="text-sm opacity-75">حماية بيانات موظفيك مع أعلى معايير الأمان</p>
-              </div>
-            </div>
+            {features.map((feature, index) => (
+              <motion.div
+                key={index}
+                variants={itemVariants}
+                whileHover={{ x: 10, scale: 1.02 }}
+                className="flex items-start gap-4 p-4 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-all"
+              >
+                <motion.div 
+                  whileHover={{ rotate: 360 }}
+                  transition={{ duration: 0.6 }}
+                  className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center flex-shrink-0"
+                >
+                  <feature.icon className="w-6 h-6" />
+                </motion.div>
+                <div>
+                  <h3 className="font-semibold mb-2 text-lg">{feature.title}</h3>
+                  <p className="text-sm opacity-75 leading-relaxed">{feature.description}</p>
+                </div>
+              </motion.div>
+            ))}
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Auth Form Section */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+      <motion.div 
+        initial={{ x: 100, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.2 }}
+        className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background"
+      >
         <div className="w-full max-w-md">
-          <div className="text-center mb-8 lg:hidden">
-            <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="text-center mb-8 lg:hidden"
+          >
+            <motion.div 
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              className="w-16 h-16 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg"
+            >
               <CheckCircle className="w-10 h-10 text-primary-foreground" />
-            </div>
-            <h2 className="text-2xl font-bold text-foreground">GWT إدارة المهام</h2>
-          </div>
+            </motion.div>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              GWT إدارة المهام
+            </h2>
+          </motion.div>
 
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="login">تسجيل الدخول</TabsTrigger>
-              <TabsTrigger value="register">حساب جديد</TabsTrigger>
-            </TabsList>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="login">تسجيل الدخول</TabsTrigger>
+                <TabsTrigger value="register">حساب جديد</TabsTrigger>
+              </TabsList>
+            </motion.div>
 
             <TabsContent value="login">
-              <Card>
-                <CardHeader>
-                  <CardTitle>تسجيل الدخول</CardTitle>
-                  <CardDescription>
-                    أدخل بريدك الإلكتروني وكلمة المرور للوصول إلى حسابك
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleLogin} className="space-y-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Card className="border-2 hover:border-primary/50 transition-all duration-300 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-2xl">تسجيل الدخول</CardTitle>
+                    <CardDescription>
+                      أدخل بريدك الإلكتروني وكلمة المرور للوصول إلى حسابك
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="login-email">البريد الإلكتروني</Label>
                       <Input
@@ -172,29 +239,37 @@ export default function AuthPage() {
                         data-testid="login-password-input"
                       />
                     </div>
-                    <Button 
-                      type="submit" 
-                      className="w-full" 
-                      disabled={loginMutation.isPending}
-                      data-testid="login-submit-button"
-                    >
-                      {loginMutation.isPending ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
-                    </Button>
+                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                      <Button 
+                        type="submit" 
+                        className="w-full shadow-lg hover:shadow-xl transition-all" 
+                        disabled={loginMutation.isPending}
+                        data-testid="login-submit-button"
+                      >
+                        {loginMutation.isPending ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
+                      </Button>
+                    </motion.div>
                   </form>
                 </CardContent>
               </Card>
+              </motion.div>
             </TabsContent>
 
             <TabsContent value="register">
-              <Card>
-                <CardHeader>
-                  <CardTitle>إنشاء حساب جديد</CardTitle>
-                  <CardDescription>
-                    أدخل بياناتك لإنشاء حساب جديد في النظام
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleRegister} className="space-y-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Card className="border-2 hover:border-accent/50 transition-all duration-300 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-2xl">إنشاء حساب جديد</CardTitle>
+                    <CardDescription>
+                      أدخل بياناتك لإنشاء حساب جديد في النظام
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleRegister} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="register-name">الاسم الكامل</Label>
                       <Input
@@ -263,21 +338,24 @@ export default function AuthPage() {
                         />
                       </div>
                     </div>
-                    <Button 
-                      type="submit" 
-                      className="w-full" 
-                      disabled={registerMutation.isPending}
-                      data-testid="register-submit-button"
-                    >
-                      {registerMutation.isPending ? "جاري إنشاء الحساب..." : "إنشاء الحساب"}
-                    </Button>
+                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                      <Button 
+                        type="submit" 
+                        className="w-full shadow-lg hover:shadow-xl transition-all" 
+                        disabled={registerMutation.isPending}
+                        data-testid="register-submit-button"
+                      >
+                        {registerMutation.isPending ? "جاري إنشاء الحساب..." : "إنشاء الحساب"}
+                      </Button>
+                    </motion.div>
                   </form>
                 </CardContent>
               </Card>
+              </motion.div>
             </TabsContent>
           </Tabs>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

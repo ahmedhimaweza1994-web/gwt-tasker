@@ -44,6 +44,8 @@ export default function UserProfile() {
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>({});
+  const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
+  const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
 
   const userId = id || currentUser?.id;
   const isOwnProfile = !id || id === currentUser?.id;
@@ -97,7 +99,45 @@ export default function UserProfile() {
       phoneNumber: profile?.phoneNumber || "",
       address: profile?.address || "",
     });
+    setProfileImagePreview(null);
+    setCoverImagePreview(null);
     setIsEditing(true);
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'profile' | 'cover') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "خطأ",
+        description: "يرجى اختيار صورة فقط",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "خطأ",
+        description: "حجم الصورة يجب أن يكون أقل من 5 ميجابايت",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      if (type === 'profile') {
+        setProfileImagePreview(base64String);
+        setEditData({ ...editData, profilePicture: base64String });
+      } else {
+        setCoverImagePreview(base64String);
+        setEditData({ ...editData, coverImage: base64String });
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSave = () => {
@@ -107,6 +147,8 @@ export default function UserProfile() {
   const handleCancel = () => {
     setIsEditing(false);
     setEditData({});
+    setProfileImagePreview(null);
+    setCoverImagePreview(null);
   };
 
   if (profileLoading || !profile) {
@@ -136,9 +178,43 @@ export default function UserProfile() {
         <Sidebar />
         <main className={cn("flex-1 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
           {/* Modern Cover Section */}
-          <div className="relative h-48 md:h-64 bg-gradient-to-br from-purple-600 via-blue-600 to-teal-500 overflow-hidden">
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6bTAgNGMwLTIuMjEgMS43OS00IDQtNHM0IDEuNzkgNCA0LTEuNzkgNC00IDQtNC0xLjc5LTQtNHptLTIwIDRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30"></div>
+          <div className="relative h-48 md:h-64 overflow-hidden group">
+            {coverImagePreview || profile.coverImage ? (
+              <img 
+                src={coverImagePreview || profile.coverImage} 
+                alt="Cover" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <>
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-blue-600 to-teal-500"></div>
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6bTAgNGMwLTIuMjEgMS43OS00IDQtNHM0IDEuNzkgNCA0LTEuNzkgNC00IDQtNC0xLjc5LTQtNHptLTIwIDRjMC0yLjIxIDEuNzktNCA0LTRzNCAxLjc5IDQgNC0xLjc5IDQtNCA0LTQtMS43OS00LTR6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30"></div>
+              </>
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+            
+            {isOwnProfile && isEditing && (
+              <div className="absolute top-4 right-4">
+                <label htmlFor="cover-upload" className="cursor-pointer">
+                  <Button 
+                    type="button" 
+                    size="sm" 
+                    className="gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm"
+                    onClick={() => document.getElementById('cover-upload')?.click()}
+                  >
+                    <Edit className="w-4 h-4" />
+                    تغيير الغلاف
+                  </Button>
+                </label>
+                <input
+                  id="cover-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleImageChange(e, 'cover')}
+                />
+              </div>
+            )}
           </div>
 
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-0 max-w-7xl">
@@ -148,11 +224,34 @@ export default function UserProfile() {
                 {/* Avatar */}
                 <div className="relative group">
                   <Avatar className="w-28 h-28 sm:w-32 sm:h-32 md:w-36 md:h-36 border-4 border-background shadow-2xl ring-4 ring-primary/20">
-                    <AvatarImage src={profile.profilePicture} alt={profile.fullName} />
+                    <AvatarImage src={profileImagePreview || profile.profilePicture} alt={profile.fullName} />
                     <AvatarFallback className="text-3xl font-bold bg-gradient-to-br from-primary to-secondary text-white">
                       {profile.fullName?.split(" ")[0]?.charAt(0) || "م"}
                     </AvatarFallback>
                   </Avatar>
+                  
+                  {isOwnProfile && isEditing && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      <label htmlFor="profile-upload" className="cursor-pointer">
+                        <Button 
+                          type="button" 
+                          size="sm" 
+                          className="rounded-full gap-2"
+                          onClick={() => document.getElementById('profile-upload')?.click()}
+                        >
+                          <Edit className="w-4 h-4" />
+                          تغيير
+                        </Button>
+                      </label>
+                      <input
+                        id="profile-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageChange(e, 'profile')}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* User Info & Actions */}
