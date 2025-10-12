@@ -368,7 +368,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Current Status Card */}
                   <Card className="border-2">
-                    <CardHeader>
+                    <CardHeader className="flex flex-col space-y-1.5 p-6 text-right">
                       <CardTitle className="flex items-center gap-2">
                         <Zap className="w-5 h-5 text-primary" />
                         الحالة الحالية
