@@ -17,7 +17,6 @@ import { Plus, Search, Filter, ListTodo, Zap, CheckCircle2, Clock } from "lucide
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Task, User } from "@shared/schema";
-import { motion, AnimatePresence } from "framer-motion";
 
 export default function TaskManagement() {
   const { user } = useAuth();
@@ -131,20 +130,6 @@ export default function TaskManagement() {
 
   const departments = Array.from(new Set(users.map(user => user.department))).filter(dep => dep);
 
-  const statsVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: {
-        delay: i * 0.1,
-        duration: 0.5,
-        type: "spring",
-        stiffness: 100,
-      },
-    }),
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       <Navigation />
@@ -153,13 +138,9 @@ export default function TaskManagement() {
         <Sidebar />
       
         <main className={cn("flex-1 p-6 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-between mb-8"
-          >
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-2">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-2">
                 إدارة المهام
               </h1>
               <p className="text-muted-foreground flex items-center gap-2">
@@ -172,15 +153,10 @@ export default function TaskManagement() {
           
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button className="flex items-center gap-2 shadow-lg hover:shadow-primary/50 transition-all" data-testid="button-create-task">
-                    <Plus className="w-5 h-5" />
-                    إنشاء مهمة جديدة
-                  </Button>
-                </motion.div>
+                <Button className="flex items-center gap-2" data-testid="button-create-task">
+                  <Plus className="w-5 h-5" />
+                  إنشاء مهمة جديدة
+                </Button>
               </DialogTrigger>
             
               <DialogContent className="sm:max-w-[550px]" data-testid="dialog-create-task">
@@ -291,216 +267,150 @@ export default function TaskManagement() {
                 </form>
               </DialogContent>
             </Dialog>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="mb-6 shadow-lg border-primary/10" data-testid="card-task-filters">
-              <CardContent className="p-6">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex-1 min-w-[250px]">
-                    <div className="relative">
-                      <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-primary" />
-                      <Input
-                        placeholder="البحث في المهام..."
-                        className="pr-12 h-11 text-base border-primary/20 focus:border-primary"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        data-testid="input-search-tasks"
-                      />
-                    </div>
-                  </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[160px] h-11" data-testid="select-filter-status">
-                      <SelectValue placeholder="الحالة" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">كل الحالات</SelectItem>
-                      <SelectItem value="pending">قيد الانتظار</SelectItem>
-                      <SelectItem value="in_progress">قيد التنفيذ</SelectItem>
-                      <SelectItem value="completed">مكتمل</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                    <SelectTrigger className="w-[160px] h-11" data-testid="select-filter-priority">
-                      <SelectValue placeholder="الأولوية" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">كل الأولويات</SelectItem>
-                      <SelectItem value="high">عالي</SelectItem>
-                      <SelectItem value="medium">متوسط</SelectItem>
-                      <SelectItem value="low">منخفض</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {(user?.role === 'admin' || user?.role === 'sub-admin') && (
-                    <>
-                      <Select value={userFilter} onValueChange={setUserFilter}>
-                        <SelectTrigger className="w-[200px] h-11" data-testid="select-filter-user">
-                          <SelectValue placeholder="الموظف" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">كل الموظفين</SelectItem>
-                          <SelectItem value="my">مهامي</SelectItem>
-                          {users.map((user) => (
-                            <SelectItem key={user.id} value={user.id}>
-                              {user.fullName} - {user.department}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                        <SelectTrigger className="w-[160px] h-11" data-testid="select-filter-department">
-                          <SelectValue placeholder="القسم" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">كل الأقسام</SelectItem>
-                          {departments.map((dept) => (
-                            <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </>
-                  )}
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button variant="outline" size="sm" onClick={handleResetFilters} className="h-11" data-testid="button-reset-filters">
-                      <Filter className="w-4 h-4 ml-2" />
-                      إعادة تعيين
-                    </Button>
-                  </motion.div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <motion.div
-              custom={0}
-              initial="hidden"
-              animate="visible"
-              variants={statsVariants}
-            >
-              <Card className="relative overflow-hidden group hover:shadow-xl transition-shadow" data-testid="card-pending-tasks-count">
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    قيد الانتظار
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-                    className="text-3xl font-bold text-yellow-600 dark:text-yellow-500"
-                  >
-                    {pendingTasks.length}
-                  </motion.div>
-                  <p className="text-xs text-muted-foreground mt-1">مهمة في الانتظار</p>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              custom={1}
-              initial="hidden"
-              animate="visible"
-              variants={statsVariants}
-            >
-              <Card className="relative overflow-hidden group hover:shadow-xl transition-shadow" data-testid="card-progress-tasks-count">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Zap className="w-4 h-4" />
-                    قيد التنفيذ
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
-                    className="text-3xl font-bold text-blue-600 dark:text-blue-500"
-                  >
-                    {inProgressTasks.length}
-                  </motion.div>
-                  <p className="text-xs text-muted-foreground mt-1">مهمة قيد التنفيذ</p>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              custom={2}
-              initial="hidden"
-              animate="visible"
-              variants={statsVariants}
-            >
-              <Card className="relative overflow-hidden group hover:shadow-xl transition-shadow" data-testid="card-review-tasks-count">
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Search className="w-4 h-4" />
-                    تحت المراجعة
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.4 }}
-                    className="text-3xl font-bold text-purple-600 dark:text-purple-500"
-                  >
-                    {underReviewTasks.length}
-                  </motion.div>
-                  <p className="text-xs text-muted-foreground mt-1">مهمة تحت المراجعة</p>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              custom={3}
-              initial="hidden"
-              animate="visible"
-              variants={statsVariants}
-            >
-              <Card className="relative overflow-hidden group hover:shadow-xl transition-shadow" data-testid="card-completed-tasks-count">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    مكتمل
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.5 }}
-                    className="text-3xl font-bold text-green-600 dark:text-green-500"
-                  >
-                    {completedTasks.length}
-                  </motion.div>
-                  <p className="text-xs text-muted-foreground mt-1">مهمة مكتملة</p>
-                </CardContent>
-              </Card>
-            </motion.div>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-          >
-            <TaskKanban
-              pendingTasks={pendingTasks}
-              inProgressTasks={inProgressTasks}
-              underReviewTasks={underReviewTasks}
-              completedTasks={completedTasks}
-            />
-          </motion.div>
+          <Card className="mb-6" data-testid="card-task-filters">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="relative">
+                    <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="البحث في المهام..."
+                      className="pr-10"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      data-testid="input-search-tasks"
+                    />
+                  </div>
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[140px]" data-testid="select-filter-status">
+                    <SelectValue placeholder="الحالة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الحالات</SelectItem>
+                    <SelectItem value="pending">قيد الانتظار</SelectItem>
+                    <SelectItem value="in_progress">قيد التنفيذ</SelectItem>
+                    <SelectItem value="completed">مكتمل</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                  <SelectTrigger className="w-[140px]" data-testid="select-filter-priority">
+                    <SelectValue placeholder="الأولوية" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الأولويات</SelectItem>
+                    <SelectItem value="high">عالي</SelectItem>
+                    <SelectItem value="medium">متوسط</SelectItem>
+                    <SelectItem value="low">منخفض</SelectItem>
+                  </SelectContent>
+                </Select>
+                {(user?.role === 'admin' || user?.role === 'sub-admin') && (
+                  <>
+                    <Select value={userFilter} onValueChange={setUserFilter}>
+                      <SelectTrigger className="w-[180px]" data-testid="select-filter-user">
+                        <SelectValue placeholder="الموظف" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">كل الموظفين</SelectItem>
+                        <SelectItem value="my">مهامي</SelectItem>
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.fullName} - {user.department}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                      <SelectTrigger className="w-[140px]" data-testid="select-filter-department">
+                        <SelectValue placeholder="القسم" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">كل الأقسام</SelectItem>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
+                <Button variant="outline" size="sm" onClick={handleResetFilters} data-testid="button-reset-filters">
+                  <Filter className="w-4 h-4 ml-2" />
+                  إعادة تعيين
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-pending-tasks-count">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  قيد الانتظار
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-500">
+                  {pendingTasks.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">مهمة في الانتظار</p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-progress-tasks-count">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Zap className="w-4 h-4" />
+                  قيد التنفيذ
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-500">
+                  {inProgressTasks.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">مهمة قيد التنفيذ</p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-review-tasks-count">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Search className="w-4 h-4" />
+                  تحت المراجعة
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-500">
+                  {underReviewTasks.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">مهمة تحت المراجعة</p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-completed-tasks-count">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  مكتمل
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                  {completedTasks.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">مهمة مكتملة</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <TaskKanban
+            pendingTasks={pendingTasks}
+            inProgressTasks={inProgressTasks}
+            underReviewTasks={underReviewTasks}
+            completedTasks={completedTasks}
+          />
         </main>
       </div>
     </div>

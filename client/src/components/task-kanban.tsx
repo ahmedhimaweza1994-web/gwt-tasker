@@ -9,9 +9,6 @@ import { Label } from "@/components/ui/label";
 import {
   MoreHorizontal,
   Calendar,
-  Paperclip,
-  MessageSquare,
-  Plus,
   AlertCircle,
   Clock,
   CheckCircle,
@@ -19,7 +16,8 @@ import {
   Star,
   Trash2,
   ArrowRight,
-  Eye
+  Eye,
+  Building2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -38,7 +36,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Task } from "@shared/schema";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface TaskKanbanProps {
@@ -170,58 +168,20 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "pending": return <Clock className="w-4 h-4" />;
-      case "in_progress": return <AlertCircle className="w-4 h-4" />;
-      case "under_review": return <Eye className="w-4 h-4" />;
-      case "completed": return <CheckCircle className="w-4 h-4" />;
-      default: return null;
-    }
-  };
-
-  const columnVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      x: 0,
-      transition: {
-        delay: i * 0.1,
-        duration: 0.5,
-      },
-    }),
-  };
-
-  const taskVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: {
-        delay: i * 0.05,
-        type: "spring",
-        stiffness: 100,
-      },
-    }),
-    exit: { opacity: 0, scale: 0.8, transition: { duration: 0.2 } },
-  };
-
-  const TaskCard = ({ task, index }: { task: Task; index: number }) => (
+  const TaskCard = ({ task }: { task: Task }) => (
     <motion.div
-      custom={index}
-      variants={taskVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
       layout
-      whileHover={{ scale: 1.02, y: -4 }}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.2 }}
       className="group"
     >
-      <Card className="p-4 cursor-pointer hover:shadow-lg transition-all duration-300 border-primary/10 hover:border-primary/30 bg-gradient-to-br from-card to-card/50">
-        <div className="space-y-3">
+      <Card className="p-3 cursor-pointer hover:shadow-md transition-shadow border-border/50 hover:border-primary/30">
+        <div className="space-y-2">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <h4 className="font-semibold text-base truncate group-hover:text-primary transition-colors">
+              <h4 className="font-semibold text-sm truncate">
                 {task.title}
               </h4>
               {task.companyName && (
@@ -233,7 +193,7 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   <MoreHorizontal className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -277,7 +237,7 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
           </div>
 
           {task.description && (
-            <p className="text-sm text-muted-foreground line-clamp-2">
+            <p className="text-xs text-muted-foreground line-clamp-2">
               {task.description}
             </p>
           )}
@@ -295,29 +255,23 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
           </div>
 
           {task.dueDate && (
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-2 py-1"
-            >
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Calendar className="w-3 h-3" />
               {new Date(task.dueDate).toLocaleDateString('ar')}
-            </motion.div>
+            </div>
           )}
 
           {task.assignedToUser && (
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="flex items-center gap-2 mt-2"
-            >
-              <Avatar className="h-6 w-6 ring-2 ring-primary/20">
-                <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-accent text-white">
+            <div className="flex items-center gap-2 mt-2">
+              <Avatar className="h-6 w-6">
+                <AvatarFallback className="text-xs">
                   {task.assignedToUser.fullName[0]}
                 </AvatarFallback>
               </Avatar>
               <span className="text-xs text-muted-foreground truncate">
                 {task.assignedToUser.fullName}
               </span>
-            </motion.div>
+            </div>
           )}
         </div>
       </Card>
@@ -328,95 +282,72 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
     title, 
     tasks, 
     icon, 
-    color, 
-    columnIndex 
+    color 
   }: { 
     title: string; 
     tasks: Task[]; 
     icon: React.ReactNode; 
     color: string;
-    columnIndex: number;
   }) => (
-    <motion.div
-      custom={columnIndex}
-      variants={columnVariants}
-      initial="hidden"
-      animate="visible"
-      className="flex-1 min-w-[300px]"
-    >
+    <div className="flex-1 min-w-[280px]">
       <Card className={cn("h-full border-t-4", color)}>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle className="flex items-center justify-between text-base">
             <div className="flex items-center gap-2">
               {icon}
-              <span className="text-lg font-bold">{title}</span>
+              <span>{title}</span>
             </div>
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, delay: columnIndex * 0.1 + 0.3 }}
-            >
-              <Badge variant="secondary" className="text-sm">
-                {tasks.length}
-              </Badge>
-            </motion.div>
+            <Badge variant="secondary" className="text-sm">
+              {tasks.length}
+            </Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto custom-scrollbar">
+        <CardContent className="space-y-3 max-h-[calc(100vh-350px)] overflow-y-auto px-3">
           <AnimatePresence mode="popLayout">
             {tasks.length > 0 ? (
-              tasks.map((task, index) => (
-                <TaskCard key={task.id} task={task} index={index} />
+              tasks.map((task) => (
+                <TaskCard key={task.id} task={task} />
               ))
             ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-center py-12 text-muted-foreground"
-              >
+              <div className="text-center py-8 text-muted-foreground">
                 <div className="flex flex-col items-center gap-2">
                   {icon}
                   <p className="text-sm">لا توجد مهام</p>
                 </div>
-              </motion.div>
+              </div>
             )}
           </AnimatePresence>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 
   return (
     <>
-      <div className="flex gap-6 overflow-x-auto pb-6 custom-scrollbar">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <KanbanColumn
           title="قيد الانتظار"
           tasks={pendingTasks}
           icon={<Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-500" />}
           color="border-t-yellow-500"
-          columnIndex={0}
         />
         <KanbanColumn
           title="قيد التنفيذ"
           tasks={inProgressTasks}
           icon={<AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-500" />}
           color="border-t-blue-500"
-          columnIndex={1}
         />
         <KanbanColumn
           title="تحت المراجعة"
           tasks={underReviewTasks}
           icon={<Eye className="w-5 h-5 text-purple-600 dark:text-purple-500" />}
           color="border-t-purple-500"
-          columnIndex={2}
         />
         <KanbanColumn
           title="مكتمل"
           tasks={completedTasks}
           icon={<CheckCircle className="w-5 h-5 text-green-600 dark:text-green-500" />}
           color="border-t-green-500"
-          columnIndex={3}
         />
       </div>
 
@@ -460,26 +391,6 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
           </div>
         </DialogContent>
       </Dialog>
-
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: hsl(var(--muted));
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: hsl(var(--primary));
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: hsl(var(--primary) / 0.8);
-        }
-      `}</style>
     </>
   );
 }
-
-import { Building2 } from "lucide-react";
