@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,7 +17,9 @@ import {
   CheckCircle,
   Trophy,
   Star,
-  Trash2
+  Trash2,
+  ArrowRight,
+  Eye
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -36,26 +38,28 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Task } from "@shared/schema";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+
 interface TaskKanbanProps {
   pendingTasks: Task[];
   inProgressTasks: Task[];
   underReviewTasks: Task[];
   completedTasks: Task[];
 }
+
 export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewTasks, completedTasks }: TaskKanbanProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [assignPointsDialog, setAssignPointsDialog] = useState<{ open: boolean; taskId: string | null }>({ open: false, taskId: null });
   const [rewardPoints, setRewardPoints] = useState("");
   
-  // Update task status mutation
   const updateTaskMutation = useMutation({
     mutationFn: async (data: { taskId: string; status: string }) => {
       const res = await apiRequest("PUT", `/api/tasks/${data.taskId}`, { status: data.status });
       return res.json();
     },
     onSuccess: () => {
-      // إبطال الـ queries المحددة لتحديث الـ list محليًا بدون ريلوود
       queryClient.invalidateQueries({ queryKey: ["/api/tasks/my"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tasks/assigned"] });
       toast({
@@ -71,7 +75,7 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
       });
     },
   });
-  // Approve task review mutation
+
   const approveTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
       const res = await apiRequest("PUT", `/api/tasks/${taskId}/approve-review`, {});
@@ -103,7 +107,6 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
     approveTaskMutation.mutate(taskId);
   };
 
-  // Assign points mutation
   const assignPointsMutation = useMutation({
     mutationFn: async (data: { taskId: string; rewardPoints: number }) => {
       const res = await apiRequest("PUT", `/api/tasks/${data.taskId}/assign-points`, { rewardPoints: data.rewardPoints });
@@ -130,57 +133,34 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
     },
   });
 
-  const deleteTaskMutation = useMutation({
-    mutationFn: async (taskId: string) => {
-      const res = await apiRequest("DELETE", `/api/tasks/${taskId}`, {});
-      if (!res.ok) throw new Error("Failed to delete task");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks/my"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks/assigned"] });
-      toast({
-        title: "تم حذف المهمة",
-        description: "تم حذف المهمة بنجاح",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "خطأ في حذف المهمة",
-        description: error.message || "حدث خطأ غير متوقع",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleAssignPoints = () => {
-    if (!assignPointsDialog.taskId || !rewardPoints) return;
     const points = parseInt(rewardPoints);
     if (isNaN(points) || points <= 0) {
       toast({
-        title: "خطأ في القيمة",
-        description: "يجب إدخال رقم صحيح أكبر من صفر",
+        title: "خطأ",
+        description: "يرجى إدخال عدد صحيح من النقاط",
         variant: "destructive",
       });
       return;
     }
-    assignPointsMutation.mutate({ taskId: assignPointsDialog.taskId, rewardPoints: points });
+    if (assignPointsDialog.taskId) {
+      assignPointsMutation.mutate({ taskId: assignPointsDialog.taskId, rewardPoints: points });
+    }
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    if (window.confirm("هل أنت متأكد من حذف هذه المهمة؟ لا يمكن التراجع عن هذا الإجراء.")) {
-      deleteTaskMutation.mutate(taskId);
-    }
-  };
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "high": return "destructive";
-      case "medium": return "secondary";
-      case "low": return "outline";
-      default: return "outline";
+      case "high":
+        return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20";
+      case "medium":
+        return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20";
+      case "low":
+        return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20";
+      default:
+        return "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20";
     }
   };
+
   const getPriorityLabel = (priority: string) => {
     switch (priority) {
       case "high": return "عالي";
@@ -189,334 +169,317 @@ export default function TaskKanban({ pendingTasks, inProgressTasks, underReviewT
       default: return priority;
     }
   };
-  const formatDate = (dateInput?: string | Date | null) => {
-    if (!dateInput) return null;
-    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    const now = new Date();
-    const diffTime = date.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-   
-    if (diffDays < 0) return "متأخر";
-    if (diffDays === 0) return "اليوم";
-    if (diffDays === 1) return "غداً";
-    return `${diffDays} أيام`;
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "pending": return <Clock className="w-4 h-4" />;
+      case "in_progress": return <AlertCircle className="w-4 h-4" />;
+      case "under_review": return <Eye className="w-4 h-4" />;
+      case "completed": return <CheckCircle className="w-4 h-4" />;
+      default: return null;
+    }
   };
-  const TaskCard = ({ task, status }: { task: Task; status: string }) => {
-    return (
-      <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer group" data-testid={`task-card-${task.id}`}>
-        <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <h4 className="font-semibold text-foreground text-sm leading-tight flex-1 ml-2">
-            {task.title}
-          </h4>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <MoreHorizontal className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleMoveTask(task.id, "pending")}>
-                نقل إلى: قيد الانتظار
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleMoveTask(task.id, "in_progress")}>
-                نقل إلى: قيد التنفيذ
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleMoveTask(task.id, "under_review")}>
-                نقل إلى: تحت المراجعة
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleMoveTask(task.id, "completed")}>
-                نقل إلى: مكتمل
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => handleDeleteTask(task.id)} 
-                className="text-destructive focus:text-destructive"
-                data-testid="button-delete-task"
-              >
-                <Trash2 className="w-4 h-4 ml-2" />
-                حذف المهمة
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {task.description && (
-          <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-            {task.description}
-          </p>
-        )}
-        <div className="flex items-center gap-2 mb-3">
-          <Badge variant={getPriorityColor(task.priority)} className="text-xs">
-            {getPriorityLabel(task.priority)}
-          </Badge>
-          {task.tags?.map((tag) => (
-            <Badge key={tag} variant="outline" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            {task.assignedTo && (
-              <Avatar className="w-6 h-6">
-                <AvatarFallback className="text-xs">
-                  {task.assignedTo.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-            )}
-           
-            {task.attachments && task.attachments.length > 0 && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Paperclip className="w-3 h-3" />
-                <span>{task.attachments.length}</span>
-              </div>
-            )}
-           
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <MessageSquare className="w-3 h-3" />
-              <span>0</span>
+
+  const columnVariants = {
+    hidden: { opacity: 0, x: -20 },
+    visible: (i: number) => ({
+      opacity: 1,
+      x: 0,
+      transition: {
+        delay: i * 0.1,
+        duration: 0.5,
+      },
+    }),
+  };
+
+  const taskVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: i * 0.05,
+        type: "spring",
+        stiffness: 100,
+      },
+    }),
+    exit: { opacity: 0, scale: 0.8, transition: { duration: 0.2 } },
+  };
+
+  const TaskCard = ({ task, index }: { task: Task; index: number }) => (
+    <motion.div
+      custom={index}
+      variants={taskVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      layout
+      whileHover={{ scale: 1.02, y: -4 }}
+      className="group"
+    >
+      <Card className="p-4 cursor-pointer hover:shadow-lg transition-all duration-300 border-primary/10 hover:border-primary/30 bg-gradient-to-br from-card to-card/50">
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-base truncate group-hover:text-primary transition-colors">
+                {task.title}
+              </h4>
+              {task.companyName && (
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" />
+                  {task.companyName}
+                </p>
+              )}
             </div>
-            
-            {task.rewardPoints && task.rewardPoints > 0 && (
-              <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-500 font-semibold" data-testid={`task-reward-points-${task.id}`}>
-                <Star className="w-3 h-3 fill-current" />
-                <span>{task.rewardPoints}</span>
-              </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {task.status === 'pending' && (
+                  <DropdownMenuItem onClick={() => handleMoveTask(task.id, 'in_progress')}>
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                    نقل إلى قيد التنفيذ
+                  </DropdownMenuItem>
+                )}
+                {task.status === 'in_progress' && (
+                  <>
+                    <DropdownMenuItem onClick={() => handleMoveTask(task.id, 'under_review')}>
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                      نقل للمراجعة
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleMoveTask(task.id, 'pending')}>
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                      إرجاع للانتظار
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {task.status === 'under_review' && user?.role === 'admin' && (
+                  <DropdownMenuItem onClick={() => handleApproveTask(task.id)}>
+                    <CheckCircle className="w-4 h-4 ml-2" />
+                    الموافقة والإكمال
+                  </DropdownMenuItem>
+                )}
+                {task.status === 'completed' && user?.role === 'admin' && !task.rewardPoints && (
+                  <DropdownMenuItem onClick={() => setAssignPointsDialog({ open: true, taskId: task.id })}>
+                    <Star className="w-4 h-4 ml-2" />
+                    تعيين نقاط
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem className="text-destructive">
+                  <Trash2 className="w-4 h-4 ml-2" />
+                  حذف المهمة
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {task.description && (
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {task.description}
+            </p>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge className={cn("text-xs border", getPriorityColor(task.priority))}>
+              {getPriorityLabel(task.priority)}
+            </Badge>
+            {task.rewardPoints && (
+              <Badge variant="secondary" className="text-xs gap-1">
+                <Trophy className="w-3 h-3" />
+                {task.rewardPoints} نقطة
+              </Badge>
             )}
           </div>
+
           {task.dueDate && (
-            <div className={`flex items-center gap-1 ${
-              formatDate(task.dueDate) === "متأخر" ? "text-destructive" : "text-muted-foreground"
-            }`}>
-              {formatDate(task.dueDate) === "متأخر" && <AlertCircle className="w-3 h-3" />}
-              {formatDate(task.dueDate) !== "متأخر" && <Calendar className="w-3 h-3" />}
-              <span>{formatDate(task.dueDate)}</span>
-            </div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-2 py-1"
+            >
+              <Calendar className="w-3 h-3" />
+              {new Date(task.dueDate).toLocaleDateString('ar')}
+            </motion.div>
+          )}
+
+          {task.assignedToUser && (
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="flex items-center gap-2 mt-2"
+            >
+              <Avatar className="h-6 w-6 ring-2 ring-primary/20">
+                <AvatarFallback className="text-xs bg-gradient-to-br from-primary to-accent text-white">
+                  {task.assignedToUser.fullName[0]}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-xs text-muted-foreground truncate">
+                {task.assignedToUser.fullName}
+              </span>
+            </motion.div>
           )}
         </div>
-      </CardContent>
-    </Card>
-    );
-  };
+      </Card>
+    </motion.div>
+  );
+
+  const KanbanColumn = ({ 
+    title, 
+    tasks, 
+    icon, 
+    color, 
+    columnIndex 
+  }: { 
+    title: string; 
+    tasks: Task[]; 
+    icon: React.ReactNode; 
+    color: string;
+    columnIndex: number;
+  }) => (
+    <motion.div
+      custom={columnIndex}
+      variants={columnVariants}
+      initial="hidden"
+      animate="visible"
+      className="flex-1 min-w-[300px]"
+    >
+      <Card className={cn("h-full border-t-4", color)}>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {icon}
+              <span className="text-lg font-bold">{title}</span>
+            </div>
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, delay: columnIndex * 0.1 + 0.3 }}
+            >
+              <Badge variant="secondary" className="text-sm">
+                {tasks.length}
+              </Badge>
+            </motion.div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto custom-scrollbar">
+          <AnimatePresence mode="popLayout">
+            {tasks.length > 0 ? (
+              tasks.map((task, index) => (
+                <TaskCard key={task.id} task={task} index={index} />
+              ))
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-center py-12 text-muted-foreground"
+              >
+                <div className="flex flex-col items-center gap-2">
+                  {icon}
+                  <p className="text-sm">لا توجد مهام</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
 
   return (
     <>
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-testid="kanban-board">
-      {/* Pending Column */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <div className="w-3 h-3 rounded-full bg-muted"></div>
-                قيد الانتظار
-              </CardTitle>
-              <Badge variant="secondary" className="text-xs">
-                {pendingTasks.length}
-              </Badge>
-            </div>
-          </CardHeader>
-        </Card>
-        <div className="space-y-3" data-testid="kanban-pending-column">
-          {pendingTasks.map((task) => (
-            <TaskCard key={task.id} task={task} status="pending" />
-          ))}
-         
-          <Card className="border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 transition-colors">
-            <CardContent className="p-4">
-              <Button variant="ghost" className="w-full justify-center text-muted-foreground hover:text-foreground" data-testid="button-add-pending-task">
-                <Plus className="w-4 h-4 ml-2" />
-                إضافة مهمة
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="flex gap-6 overflow-x-auto pb-6 custom-scrollbar">
+        <KanbanColumn
+          title="قيد الانتظار"
+          tasks={pendingTasks}
+          icon={<Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-500" />}
+          color="border-t-yellow-500"
+          columnIndex={0}
+        />
+        <KanbanColumn
+          title="قيد التنفيذ"
+          tasks={inProgressTasks}
+          icon={<AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-500" />}
+          color="border-t-blue-500"
+          columnIndex={1}
+        />
+        <KanbanColumn
+          title="تحت المراجعة"
+          tasks={underReviewTasks}
+          icon={<Eye className="w-5 h-5 text-purple-600 dark:text-purple-500" />}
+          color="border-t-purple-500"
+          columnIndex={2}
+        />
+        <KanbanColumn
+          title="مكتمل"
+          tasks={completedTasks}
+          icon={<CheckCircle className="w-5 h-5 text-green-600 dark:text-green-500" />}
+          color="border-t-green-500"
+          columnIndex={3}
+        />
       </div>
-      {/* In Progress Column */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <div className="w-3 h-3 rounded-full bg-primary animate-pulse"></div>
-                قيد التنفيذ
-              </CardTitle>
-              <Badge variant="default" className="text-xs">
-                {inProgressTasks.length}
-              </Badge>
-            </div>
-          </CardHeader>
-        </Card>
-        <div className="space-y-3" data-testid="kanban-progress-column">
-          {inProgressTasks.map((task) => (
-            <div key={task.id} className="relative">
-              <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary rounded-full"></div>
-              <TaskCard task={task} status="in_progress" />
-            </div>
-          ))}
-         
-          <Card className="border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 transition-colors">
-            <CardContent className="p-4">
-              <Button variant="ghost" className="w-full justify-center text-muted-foreground hover:text-foreground" data-testid="button-add-progress-task">
-                <Plus className="w-4 h-4 ml-2" />
-                إضافة مهمة
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      {/* Under Review Column */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <div className="w-3 h-3 rounded-full bg-warning"></div>
-                تحت المراجعة
-              </CardTitle>
-              <Badge variant="secondary" className="text-xs">
-                {underReviewTasks.length}
-              </Badge>
-            </div>
-          </CardHeader>
-        </Card>
-        <div className="space-y-3" data-testid="kanban-review-column">
-          {underReviewTasks.map((task) => {
-            const canApprove = user && (
-              user.role === 'admin' || 
-              user.role === 'sub-admin' || 
-              task.createdBy === user.id
-            );
-            
-            return (
-              <div key={task.id} className="relative">
-                <div className="absolute right-0 top-0 bottom-0 w-1 bg-warning rounded-full"></div>
-                <TaskCard task={task} status="under_review" />
-                {canApprove && (
-                  <Button
-                    onClick={() => handleApproveTask(task.id)}
-                    disabled={approveTaskMutation.isPending}
-                    className="w-full mt-2"
-                    size="sm"
-                    variant="default"
-                    data-testid={`button-approve-task-${task.id}`}
-                  >
-                    <CheckCircle className="w-4 h-4 ml-2" />
-                    {approveTaskMutation.isPending ? "جاري الموافقة..." : "الموافقة وإكمال المهمة"}
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {/* Completed Column */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <div className="w-3 h-3 rounded-full bg-success"></div>
-                مكتمل
-              </CardTitle>
-              <Badge variant="outline" className="text-xs">
-                {completedTasks.length}
-              </Badge>
-            </div>
-          </CardHeader>
-        </Card>
-        <div className="space-y-3" data-testid="kanban-completed-column">
-          {completedTasks.map((task) => {
-            const canAssignPoints = user && (
-              user.role === 'admin' || 
-              user.role === 'sub-admin' || 
-              task.createdBy === user.id
-            );
-            
-            return (
-              <div key={task.id} className="opacity-75 hover:opacity-100 transition-opacity">
-                <TaskCard task={task} status="completed" />
-                {canAssignPoints && !task.rewardPoints && (
-                  <Button
-                    onClick={() => {
-                      setAssignPointsDialog({ open: true, taskId: task.id });
-                      setRewardPoints("");
-                    }}
-                    className="w-full mt-2"
-                    size="sm"
-                    variant="outline"
-                    data-testid={`button-assign-points-${task.id}`}
-                  >
-                    <Trophy className="w-4 h-4 ml-2 text-yellow-500" />
-                    تعيين نقاط المكافأة
-                  </Button>
-                )}
-                {task.rewardPoints && task.rewardPoints > 0 && (
-                  <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center gap-2">
-                    <Trophy className="w-4 h-4 text-yellow-600 dark:text-yellow-500" />
-                    <span className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">
-                      {task.rewardPoints} نقطة مكافأة
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-    
-    {/* Assign Points Dialog */}
-    <Dialog open={assignPointsDialog.open} onOpenChange={(open) => !open && setAssignPointsDialog({ open: false, taskId: null })}>
-      <DialogContent data-testid="dialog-assign-points">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-yellow-500" />
-            تعيين نقاط المكافأة
-          </DialogTitle>
-          <DialogDescription>
-            قم بتعيين نقاط المكافأة للمهمة المكتملة. سيتم إضافة النقاط لرصيد الموظف المسؤول عن المهمة.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-4 mt-4">
-          <div className="space-y-2">
-            <Label htmlFor="reward-points">عدد النقاط *</Label>
-            <div className="flex items-center gap-2">
-              <Star className="w-5 h-5 text-yellow-500" />
+
+      <Dialog open={assignPointsDialog.open} onOpenChange={(open) => setAssignPointsDialog({ open, taskId: null })}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-500" />
+              تعيين نقاط المكافأة
+            </DialogTitle>
+            <DialogDescription>
+              أدخل عدد النقاط التي تريد منحها للموظف عند إكمال هذه المهمة
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reward-points" className="text-base font-medium">
+                عدد النقاط
+              </Label>
               <Input
                 id="reward-points"
                 type="number"
-                placeholder="أدخل عدد النقاط (مثال: 100)"
+                min="1"
+                placeholder="مثال: 10"
                 value={rewardPoints}
                 onChange={(e) => setRewardPoints(e.target.value)}
-                min="1"
-                data-testid="input-reward-points"
+                className="text-base"
               />
+              <p className="text-xs text-muted-foreground">
+                سيتم إضافة هذه النقاط إلى رصيد الموظف المكلف بالمهمة
+              </p>
             </div>
           </div>
-          
           <div className="flex gap-3">
-            <Button
-              onClick={handleAssignPoints}
-              disabled={assignPointsMutation.isPending || !rewardPoints}
-              className="flex-1"
-              data-testid="button-submit-points"
-            >
-              <Trophy className="w-4 h-4 ml-2" />
+            <Button onClick={handleAssignPoints} disabled={!rewardPoints || assignPointsMutation.isPending} className="flex-1">
               {assignPointsMutation.isPending ? "جاري التعيين..." : "تعيين النقاط"}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setAssignPointsDialog({ open: false, taskId: null })}
-              data-testid="button-cancel-points"
-            >
+            <Button variant="outline" onClick={() => setAssignPointsDialog({ open: false, taskId: null })}>
               إلغاء
             </Button>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: hsl(var(--muted));
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: hsl(var(--primary));
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: hsl(var(--primary) / 0.8);
+        }
+      `}</style>
     </>
   );
 }
+
+import { Building2 } from "lucide-react";
