@@ -422,14 +422,14 @@ export default function Dashboard() {
 
                   {/* Change Status Card */}
                   <Card className="border-2">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
+                    <CardHeader className="text-right">
+                      <CardTitle className="flex items-center gap-2 text-right">
                         <CheckSquare className="w-5 h-5 text-primary" />
                         تغيير الحالة
                       </CardTitle>
-                      <CardDescription>اختر الحالة المناسبة لنشاطك الحالي</CardDescription>
+                      <CardDescription className="text-sm text-muted-foreground text-right">اختر الحالة المناسبة لنشاطك الحالي</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 text-right">
                       <div className="grid grid-cols-2 gap-3">
                         <Button
                           variant={selectedStatus === "ready" ? "default" : "outline"}
@@ -476,7 +476,7 @@ export default function Dashboard() {
                         </Button>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-2 text-right">
                         <label className="text-sm font-medium">ملاحظات (اختياري)</label>
                         <Textarea
                           value={currentNotes}
