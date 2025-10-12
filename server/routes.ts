@@ -457,6 +457,7 @@ export function registerRoutes(app: Express): Server {
         jobTitle: user.jobTitle,
         role: user.role,
         profilePicture: user.profilePicture,
+        coverImage: user.coverImage,
         bio: user.bio,
         phoneNumber: user.phoneNumber,
         address: user.address,
@@ -480,6 +481,8 @@ export function registerRoutes(app: Express): Server {
         address: req.body.address,
         dateOfBirth: req.body.dateOfBirth,
         hireDate: req.body.hireDate,
+        profilePicture: req.body.profilePicture,
+        coverImage: req.body.coverImage,
       });
       if (!updatedUser) {
         return res.status(404).json({ message: "المستخدم غير موجود" });

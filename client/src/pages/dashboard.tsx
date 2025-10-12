@@ -477,7 +477,7 @@ export default function Dashboard() {
                       </div>
 
                       <div className="space-y-2 text-right">
-                        <label className="text-sm font-medium">ملاحظات (اختياري)</label>
+                        <label className="text-sm font-medium text-right">ملاحظات (اختياري)</label>
                         <Textarea
                           value={currentNotes}
                           onChange={(e) => setCurrentNotes(e.target.value)}

@@ -300,7 +300,7 @@ export default function Sidebar() {
         {/* Toggle Button */}
         <div className="flex h-14 items-center justify-between px-4 border-b border-border">
           {!isCollapsed && (
-            <h2 className="text-lg font-semibold text-foreground">القائمة الرئيسية</h2>
+            <h2 className="text-lg font-semibold text-foreground dark:text-white">القائمة الرئيسية</h2>
           )}
           <Button
             variant="ghost"
@@ -332,7 +332,7 @@ export default function Sidebar() {
                 <item.icon className="h-5 w-5 flex-shrink-0" />
                 {!isCollapsed && (
                   <>
-                    <span className="flex-1">{item.name}</span>
+                    <span className="flex-1 dark:text-white">{item.name}</span>
                     {item.badge && (
                       <Badge variant="secondary" className="mr-auto">
                         {item.badge}
@@ -388,8 +388,8 @@ export default function Sidebar() {
             )}></div>
             {!isCollapsed && (
               <div className="flex-1">
-                <p className="text-xs text-muted-foreground">متصل كـ</p>
-                <p className="text-sm font-medium text-foreground truncate">
+                <p className="text-xs text-muted-foreground dark:text-gray-400">متصل كـ</p>
+                <p className="text-sm font-medium text-foreground dark:text-white truncate">
                   {user?.fullName}
                 </p>
               </div>
