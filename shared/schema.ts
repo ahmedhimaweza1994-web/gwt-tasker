@@ -12,6 +12,7 @@ export const taskPriorityEnum = pgEnum('task_priority', ['low', 'medium', 'high'
 export const leaveTypeEnum = pgEnum('leave_type', ['annual', 'sick', 'maternity', 'emergency']);
 export const leaveStatusEnum = pgEnum('leave_status', ['pending', 'approved', 'rejected']);
 export const advanceStatusEnum = pgEnum('advance_status', ['pending', 'approved', 'rejected']);
+export const deductionStatusEnum = pgEnum('deduction_status', ['pending', 'approved', 'rejected']);
 export const chatRoomTypeEnum = pgEnum('chat_room_type', ['private', 'group']);
 export const messageTypeEnum = pgEnum('message_type', ['text', 'image', 'file', 'meeting_link']);
 
@@ -126,6 +127,73 @@ export const salaryAdvanceRequests = pgTable("salary_advance_requests", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Deductions
+export const deductions = pgTable("deductions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason").notNull(),
+  deductionDate: timestamp("deduction_date").notNull().defaultNow(),
+  status: deductionStatusEnum("status").notNull().default('pending'),
+  approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Companies
+export const companies = pgTable("companies", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  logo: text("logo"),
+  industry: text("industry"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  address: text("address"),
+  website: text("website"),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Company Team Members
+export const companyTeamMembers = pgTable("company_team_members", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role"),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+});
+
+// Company Files
+export const companyFiles = pgTable("company_files", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileType: text("file_type"),
+  fileSize: integer("file_size"),
+  uploadedBy: uuid("uploaded_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Suggestions
+export const suggestions = pgTable("suggestions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category"),
+  status: text("status").notNull().default('pending'), // pending, under_review, accepted, rejected
+  adminResponse: text("admin_response"),
+  respondedBy: uuid("responded_by").references(() => users.id, { onDelete: "set null" }),
+  respondedAt: timestamp("responded_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Shifts
 export const shifts = pgTable("shifts", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -234,6 +302,11 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   taskNotes: many(taskNotes),
   leaveRequests: many(leaveRequests),
   salaryAdvanceRequests: many(salaryAdvanceRequests),
+  deductions: many(deductions),
+  createdCompanies: many(companies),
+  companyTeamMemberships: many(companyTeamMembers),
+  uploadedCompanyFiles: many(companyFiles),
+  suggestions: many(suggestions),
   shifts: many(shifts),
   notifications: many(notifications),
   createdChatRooms: many(chatRooms),
@@ -275,6 +348,32 @@ export const leaveRequestsRelations = relations(leaveRequests, ({ one }) => ({
 export const salaryAdvanceRequestsRelations = relations(salaryAdvanceRequests, ({ one }) => ({
   user: one(users, { fields: [salaryAdvanceRequests.userId], references: [users.id] }),
   approvedBy: one(users, { fields: [salaryAdvanceRequests.approvedBy], references: [users.id] }),
+}));
+
+export const deductionsRelations = relations(deductions, ({ one }) => ({
+  user: one(users, { fields: [deductions.userId], references: [users.id] }),
+  approvedBy: one(users, { fields: [deductions.approvedBy], references: [users.id] }),
+}));
+
+export const companiesRelations = relations(companies, ({ one, many }) => ({
+  createdBy: one(users, { fields: [companies.createdBy], references: [users.id] }),
+  teamMembers: many(companyTeamMembers),
+  files: many(companyFiles),
+}));
+
+export const companyTeamMembersRelations = relations(companyTeamMembers, ({ one }) => ({
+  company: one(companies, { fields: [companyTeamMembers.companyId], references: [companies.id] }),
+  user: one(users, { fields: [companyTeamMembers.userId], references: [users.id] }),
+}));
+
+export const companyFilesRelations = relations(companyFiles, ({ one }) => ({
+  company: one(companies, { fields: [companyFiles.companyId], references: [companies.id] }),
+  uploadedBy: one(users, { fields: [companyFiles.uploadedBy], references: [users.id] }),
+}));
+
+export const suggestionsRelations = relations(suggestions, ({ one }) => ({
+  user: one(users, { fields: [suggestions.userId], references: [users.id] }),
+  respondedBy: one(users, { fields: [suggestions.respondedBy], references: [users.id] }),
 }));
 
 export const shiftsRelations = relations(shifts, ({ one }) => ({
@@ -363,6 +462,38 @@ export const insertSalaryAdvanceRequestSchema = createInsertSchema(salaryAdvance
   approvedBy: true,
 });
 
+export const insertDeductionSchema = createInsertSchema(deductions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  approvedAt: true,
+  approvedBy: true,
+});
+
+export const insertCompanySchema = createInsertSchema(companies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCompanyTeamMemberSchema = createInsertSchema(companyTeamMembers).omit({
+  id: true,
+  joinedAt: true,
+});
+
+export const insertCompanyFileSchema = createInsertSchema(companyFiles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSuggestionSchema = createInsertSchema(suggestions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  respondedAt: true,
+  respondedBy: true,
+});
+
 export const insertChatRoomSchema = createInsertSchema(chatRooms).omit({
   id: true,
   createdAt: true,
@@ -398,6 +529,16 @@ export type LeaveRequest = typeof leaveRequests.$inferSelect;
 export type InsertLeaveRequest = z.infer<typeof insertLeaveRequestSchema>;
 export type SalaryAdvanceRequest = typeof salaryAdvanceRequests.$inferSelect;
 export type InsertSalaryAdvanceRequest = z.infer<typeof insertSalaryAdvanceRequestSchema>;
+export type Deduction = typeof deductions.$inferSelect;
+export type InsertDeduction = z.infer<typeof insertDeductionSchema>;
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
+export type CompanyTeamMember = typeof companyTeamMembers.$inferSelect;
+export type InsertCompanyTeamMember = z.infer<typeof insertCompanyTeamMemberSchema>;
+export type CompanyFile = typeof companyFiles.$inferSelect;
+export type InsertCompanyFile = z.infer<typeof insertCompanyFileSchema>;
+export type Suggestion = typeof suggestions.$inferSelect;
+export type InsertSuggestion = z.infer<typeof insertSuggestionSchema>;
 export type TaskNote = typeof taskNotes.$inferSelect;
 export type TaskCollaborator = typeof taskCollaborators.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;

@@ -5,6 +5,11 @@ import {
   auxSessions,
   leaveRequests,
   salaryAdvanceRequests,
+  deductions,
+  companies,
+  companyTeamMembers,
+  companyFiles,
+  suggestions,
   taskNotes,
   taskCollaborators,
   notifications,
@@ -26,6 +31,16 @@ import {
   type InsertLeaveRequest,
   type SalaryAdvanceRequest,
   type InsertSalaryAdvanceRequest,
+  type Deduction,
+  type InsertDeduction,
+  type Company,
+  type InsertCompany,
+  type CompanyTeamMember,
+  type InsertCompanyTeamMember,
+  type CompanyFile,
+  type InsertCompanyFile,
+  type Suggestion,
+  type InsertSuggestion,
   type TaskNote,
   type Notification,
   type Shift,
@@ -101,7 +116,35 @@ export interface IStorage {
   getUserSalaryAdvanceRequests(userId: string): Promise<SalaryAdvanceRequest[]>;
   getPendingSalaryAdvanceRequests(): Promise<(SalaryAdvanceRequest & { user: User })[]>;
   updateSalaryAdvanceRequest(id: string, updates: Partial<SalaryAdvanceRequest>): Promise<SalaryAdvanceRequest | undefined>;
- 
+
+  // Deductions
+  createDeduction(deduction: InsertDeduction): Promise<Deduction>;
+  getUserDeductions(userId: string): Promise<Deduction[]>;
+  getPendingDeductions(): Promise<(Deduction & { user: User })[]>;
+  getAllDeductions(): Promise<Deduction[]>;
+  updateDeduction(id: string, updates: Partial<Deduction>): Promise<Deduction | undefined>;
+
+  // Companies
+  createCompany(company: InsertCompany): Promise<Company>;
+  getCompany(id: string): Promise<Company | undefined>;
+  getAllCompanies(): Promise<Company[]>;
+  getUserCompanies(userId: string): Promise<Company[]>;
+  updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined>;
+  deleteCompany(id: string): Promise<boolean>;
+  addCompanyTeamMember(companyId: string, userId: string, role?: string): Promise<void>;
+  removeCompanyTeamMember(companyId: string, userId: string): Promise<void>;
+  getCompanyTeamMembers(companyId: string): Promise<User[]>;
+  addCompanyFile(file: InsertCompanyFile): Promise<CompanyFile>;
+  getCompanyFiles(companyId: string): Promise<CompanyFile[]>;
+  deleteCompanyFile(fileId: string): Promise<boolean>;
+
+  // Suggestions
+  createSuggestion(suggestion: InsertSuggestion): Promise<Suggestion>;
+  getUserSuggestions(userId: string): Promise<Suggestion[]>;
+  getAllSuggestions(): Promise<Suggestion[]>;
+  updateSuggestion(id: string, updates: Partial<Suggestion>): Promise<Suggestion | undefined>;
+  deleteSuggestion(id: string): Promise<boolean>;
+
   // Notifications
   createNotification(userId: string, title: string, message: string, type: string): Promise<Notification>;
   getUserNotifications(userId: string, unreadOnly?: boolean): Promise<Notification[]>;
@@ -119,6 +162,7 @@ export interface IStorage {
   getUserChatRooms(userId: string): Promise<(ChatRoom & { members: User[], lastMessage?: ChatMessage })[]>;
   getChatRoom(roomId: string): Promise<ChatRoom | undefined>;
   addChatRoomMember(roomId: string, userId: string): Promise<void>;
+  ensureUserInCommonRoom(userId: string): Promise<void>;
 
   // Chat Messages
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
@@ -632,6 +676,194 @@ export class DatabaseStorage implements IStorage {
       .where(eq(salaryAdvanceRequests.id, id))
       .returning();
     return request || undefined;
+  }
+
+  // Deductions
+  async createDeduction(deduction: InsertDeduction): Promise<Deduction> {
+    const [newDeduction] = await db.insert(deductions).values(deduction).returning();
+    return newDeduction;
+  }
+
+  async getUserDeductions(userId: string): Promise<Deduction[]> {
+    return await db
+      .select()
+      .from(deductions)
+      .where(eq(deductions.userId, userId))
+      .orderBy(desc(deductions.createdAt));
+  }
+
+  async getPendingDeductions(): Promise<(Deduction & { user: User })[]> {
+    const result = await db
+      .select({
+        id: deductions.id,
+        userId: deductions.userId,
+        amount: deductions.amount,
+        reason: deductions.reason,
+        deductionDate: deductions.deductionDate,
+        status: deductions.status,
+        approvedBy: deductions.approvedBy,
+        approvedAt: deductions.approvedAt,
+        rejectionReason: deductions.rejectionReason,
+        createdAt: deductions.createdAt,
+        updatedAt: deductions.updatedAt,
+        user: users
+      })
+      .from(deductions)
+      .innerJoin(users, eq(deductions.userId, users.id))
+      .where(eq(deductions.status, 'pending'))
+      .orderBy(desc(deductions.createdAt));
+
+    return result;
+  }
+
+  async getAllDeductions(): Promise<Deduction[]> {
+    return await db
+      .select()
+      .from(deductions)
+      .orderBy(desc(deductions.createdAt));
+  }
+
+  async updateDeduction(id: string, updates: Partial<Deduction>): Promise<Deduction | undefined> {
+    const now = new Date();
+    const fixedUpdates = {
+      ...updates,
+      updatedAt: updates.updatedAt ? new Date(updates.updatedAt) : now,
+      approvedAt: updates.approvedAt ? new Date(updates.approvedAt) : updates.approvedAt,
+      deductionDate: updates.deductionDate ? new Date(updates.deductionDate) : updates.deductionDate,
+    };
+    const [deduction] = await db
+      .update(deductions)
+      .set(fixedUpdates)
+      .where(eq(deductions.id, id))
+      .returning();
+    return deduction || undefined;
+  }
+
+  // Companies
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const [newCompany] = await db.insert(companies).values(company).returning();
+    return newCompany;
+  }
+
+  async getCompany(id: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company || undefined;
+  }
+
+  async getAllCompanies(): Promise<Company[]> {
+    return await db
+      .select()
+      .from(companies)
+      .orderBy(desc(companies.createdAt));
+  }
+
+  async getUserCompanies(userId: string): Promise<Company[]> {
+    return await db
+      .select()
+      .from(companies)
+      .where(eq(companies.createdBy, userId))
+      .orderBy(desc(companies.createdAt));
+  }
+
+  async updateCompany(id: string, updates: Partial<Company>): Promise<Company | undefined> {
+    const now = new Date();
+    const fixedUpdates = {
+      ...updates,
+      updatedAt: updates.updatedAt ? new Date(updates.updatedAt) : now,
+    };
+    const [company] = await db
+      .update(companies)
+      .set(fixedUpdates)
+      .where(eq(companies.id, id))
+      .returning();
+    return company || undefined;
+  }
+
+  async deleteCompany(id: string): Promise<boolean> {
+    const result = await db.delete(companies).where(eq(companies.id, id));
+    return result.rowCount! > 0;
+  }
+
+  async addCompanyTeamMember(companyId: string, userId: string, role?: string): Promise<void> {
+    await db.insert(companyTeamMembers).values({ companyId, userId, role });
+  }
+
+  async removeCompanyTeamMember(companyId: string, userId: string): Promise<void> {
+    await db
+      .delete(companyTeamMembers)
+      .where(and(
+        eq(companyTeamMembers.companyId, companyId),
+        eq(companyTeamMembers.userId, userId)
+      ));
+  }
+
+  async getCompanyTeamMembers(companyId: string): Promise<User[]> {
+    const result = await db
+      .select({ user: users })
+      .from(companyTeamMembers)
+      .innerJoin(users, eq(companyTeamMembers.userId, users.id))
+      .where(eq(companyTeamMembers.companyId, companyId));
+
+    return result.map(r => r.user);
+  }
+
+  async addCompanyFile(file: InsertCompanyFile): Promise<CompanyFile> {
+    const [newFile] = await db.insert(companyFiles).values(file).returning();
+    return newFile;
+  }
+
+  async getCompanyFiles(companyId: string): Promise<CompanyFile[]> {
+    return await db
+      .select()
+      .from(companyFiles)
+      .where(eq(companyFiles.companyId, companyId))
+      .orderBy(desc(companyFiles.createdAt));
+  }
+
+  async deleteCompanyFile(fileId: string): Promise<boolean> {
+    const result = await db.delete(companyFiles).where(eq(companyFiles.id, fileId));
+    return result.rowCount! > 0;
+  }
+
+  // Suggestions
+  async createSuggestion(suggestion: InsertSuggestion): Promise<Suggestion> {
+    const [newSuggestion] = await db.insert(suggestions).values(suggestion).returning();
+    return newSuggestion;
+  }
+
+  async getUserSuggestions(userId: string): Promise<Suggestion[]> {
+    return await db
+      .select()
+      .from(suggestions)
+      .where(eq(suggestions.userId, userId))
+      .orderBy(desc(suggestions.createdAt));
+  }
+
+  async getAllSuggestions(): Promise<Suggestion[]> {
+    return await db
+      .select()
+      .from(suggestions)
+      .orderBy(desc(suggestions.createdAt));
+  }
+
+  async updateSuggestion(id: string, updates: Partial<Suggestion>): Promise<Suggestion | undefined> {
+    const now = new Date();
+    const fixedUpdates = {
+      ...updates,
+      updatedAt: updates.updatedAt ? new Date(updates.updatedAt) : now,
+      respondedAt: updates.respondedAt ? new Date(updates.respondedAt) : updates.respondedAt,
+    };
+    const [suggestion] = await db
+      .update(suggestions)
+      .set(fixedUpdates)
+      .where(eq(suggestions.id, id))
+      .returning();
+    return suggestion || undefined;
+  }
+
+  async deleteSuggestion(id: string): Promise<boolean> {
+    const result = await db.delete(suggestions).where(eq(suggestions.id, id));
+    return result.rowCount! > 0;
   }
 
   // Notifications

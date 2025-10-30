@@ -653,12 +653,12 @@ export function registerRoutes(app: Express): Server {
         approvedBy: req.user!.id,
         approvedAt: new Date(),
       };
-      
+
       const advanceRequest = await storage.updateSalaryAdvanceRequest(req.params.id, updates);
       if (!advanceRequest) {
         return res.status(404).json({ message: "طلب السلفة غير موجود" });
       }
-      
+
       // Notify employee
       const statusText = advanceRequest.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
       await storage.createNotification(
@@ -667,10 +667,339 @@ export function registerRoutes(app: Express): Server {
         `${statusText} طلب السلفة الخاص بك`,
         advanceRequest.status === 'approved' ? 'success' : 'error'
       );
-      
+
       res.json(advanceRequest);
     } catch (error) {
       res.status(500).json({ message: "حدث خطأ في تحديث طلب السلفة" });
+    }
+  });
+
+  // Deduction routes
+  app.post("/api/deductions", requireAuth, async (req, res) => {
+    try {
+      const deduction = await storage.createDeduction({
+        userId: req.user!.id,
+        amount: req.body.amount,
+        reason: req.body.reason,
+        deductionDate: req.body.deductionDate ? new Date(req.body.deductionDate) : new Date(),
+      });
+
+      // Notify admins
+      const admins = await storage.getUsers();
+      const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
+
+      for (const admin of adminUsers) {
+        await storage.createNotification(
+          admin.id,
+          "طلب خصم جديد",
+          `${req.user!.fullName} قدم طلب خصم جديد`,
+          "info"
+        );
+      }
+
+      res.status(201).json(deduction);
+    } catch (error) {
+      console.error('Error creating deduction:', error);
+      res.status(500).json({ message: "حدث خطأ في إضافة الخصم" });
+    }
+  });
+
+  app.get("/api/deductions/my", requireAuth, async (req, res) => {
+    try {
+      const deductions = await storage.getUserDeductions(req.user!.id);
+      res.json(deductions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الخصومات" });
+    }
+  });
+
+  app.get("/api/deductions/pending", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const deductions = await storage.getPendingDeductions();
+      res.json(deductions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الخصومات" });
+    }
+  });
+
+  app.get("/api/deductions", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const deductions = await storage.getAllDeductions();
+      res.json(deductions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الخصومات" });
+    }
+  });
+
+  app.put("/api/deductions/:id", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const updates = {
+        ...req.body,
+        approvedBy: req.user!.id,
+        approvedAt: new Date(),
+      };
+
+      const deduction = await storage.updateDeduction(req.params.id, updates);
+      if (!deduction) {
+        return res.status(404).json({ message: "طلب الخصم غير موجود" });
+      }
+
+      // Notify employee
+      const statusText = deduction.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
+      await storage.createNotification(
+        deduction.userId,
+        "تحديث طلب الخصم",
+        `${statusText} طلب الخصم الخاص بك`,
+        deduction.status === 'approved' ? 'success' : 'error'
+      );
+
+      res.json(deduction);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب الخصم" });
+    }
+  });
+
+  // Company routes
+  app.post("/api/companies", requireAuth, async (req, res) => {
+    try {
+      const company = await storage.createCompany({
+        ...req.body,
+        createdBy: req.user!.id,
+      });
+      res.status(201).json(company);
+    } catch (error) {
+      console.error('Error creating company:', error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء الشركة" });
+    }
+  });
+
+  app.get("/api/companies", requireAuth, async (req, res) => {
+    try {
+      const companies = await storage.getAllCompanies();
+      res.json(companies);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الشركات" });
+    }
+  });
+
+  app.get("/api/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) {
+        return res.status(404).json({ message: "الشركة غير موجودة" });
+      }
+      res.json(company);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الشركة" });
+    }
+  });
+
+  app.put("/api/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const company = await storage.updateCompany(req.params.id, req.body);
+      if (!company) {
+        return res.status(404).json({ message: "الشركة غير موجودة" });
+      }
+      res.json(company);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تحديث الشركة" });
+    }
+  });
+
+  app.delete("/api/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const success = await storage.deleteCompany(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "الشركة غير موجودة" });
+      }
+      res.json({ message: "تم حذف الشركة بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في حذف الشركة" });
+    }
+  });
+
+  app.post("/api/companies/:id/team", requireAuth, async (req, res) => {
+    try {
+      await storage.addCompanyTeamMember(req.params.id, req.body.userId, req.body.role);
+      res.json({ message: "تم إضافة عضو الفريق بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إضافة عضو الفريق" });
+    }
+  });
+
+  app.get("/api/companies/:id/team", requireAuth, async (req, res) => {
+    try {
+      const members = await storage.getCompanyTeamMembers(req.params.id);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب أعضاء الفريق" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/team/:userId", requireAuth, async (req, res) => {
+    try {
+      await storage.removeCompanyTeamMember(req.params.companyId, req.params.userId);
+      res.json({ message: "تم إزالة عضو الفريق بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إزالة عضو الفريق" });
+    }
+  });
+
+  app.post("/api/companies/:id/files", requireAuth, async (req, res) => {
+    try {
+      const file = await storage.addCompanyFile({
+        companyId: req.params.id,
+        name: req.body.name,
+        fileUrl: req.body.fileUrl,
+        fileType: req.body.fileType,
+        fileSize: req.body.fileSize,
+        uploadedBy: req.user!.id,
+      });
+      res.status(201).json(file);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إضافة الملف" });
+    }
+  });
+
+  app.get("/api/companies/:id/files", requireAuth, async (req, res) => {
+    try {
+      const files = await storage.getCompanyFiles(req.params.id);
+      res.json(files);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الملفات" });
+    }
+  });
+
+  app.delete("/api/companies/files/:fileId", requireAuth, async (req, res) => {
+    try {
+      const success = await storage.deleteCompanyFile(req.params.fileId);
+      if (!success) {
+        return res.status(404).json({ message: "الملف غير موجود" });
+      }
+      res.json({ message: "تم حذف الملف بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في حذف الملف" });
+    }
+  });
+
+  // Suggestion routes
+  app.post("/api/suggestions", requireAuth, async (req, res) => {
+    try {
+      const suggestion = await storage.createSuggestion({
+        userId: req.user!.id,
+        title: req.body.title,
+        description: req.body.description,
+        category: req.body.category,
+      });
+
+      // Notify admins
+      const admins = await storage.getUsers();
+      const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
+
+      for (const admin of adminUsers) {
+        await storage.createNotification(
+          admin.id,
+          "مقترح جديد",
+          `${req.user!.fullName} قدم مقترحاً جديداً: ${suggestion.title}`,
+          "info"
+        );
+      }
+
+      res.status(201).json(suggestion);
+    } catch (error) {
+      console.error('Error creating suggestion:', error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء المقترح" });
+    }
+  });
+
+  app.get("/api/suggestions", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const suggestions = await storage.getAllSuggestions();
+      res.json(suggestions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب المقترحات" });
+    }
+  });
+
+  app.get("/api/suggestions/my", requireAuth, async (req, res) => {
+    try {
+      const suggestions = await storage.getUserSuggestions(req.user!.id);
+      res.json(suggestions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب المقترحات" });
+    }
+  });
+
+  app.put("/api/suggestions/:id", requireAuth, async (req, res) => {
+    try {
+      // Check if user owns the suggestion or is admin
+      const suggestion = await storage.getAllSuggestions();
+      const existingSuggestion = suggestion.find(s => s.id === req.params.id);
+
+      if (!existingSuggestion) {
+        return res.status(404).json({ message: "المقترح غير موجود" });
+      }
+
+      const isOwner = existingSuggestion.userId === req.user!.id;
+      const isAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ message: "غير مصرح لك بتعديل هذا المقترح" });
+      }
+
+      const updates = isAdmin ? {
+        ...req.body,
+        respondedBy: req.body.status !== 'pending' ? req.user!.id : undefined,
+        respondedAt: req.body.status !== 'pending' ? new Date() : undefined,
+      } : {
+        title: req.body.title,
+        description: req.body.description,
+        category: req.body.category,
+      };
+
+      const updatedSuggestion = await storage.updateSuggestion(req.params.id, updates);
+
+      // Notify user if admin updated status
+      if (isAdmin && req.body.status && req.body.status !== 'pending') {
+        await storage.createNotification(
+          existingSuggestion.userId,
+          "تحديث على مقترحك",
+          `تم تحديث حالة مقترحك "${existingSuggestion.title}" إلى ${req.body.status}`,
+          "info"
+        );
+      }
+
+      res.json(updatedSuggestion);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تحديث المقترح" });
+    }
+  });
+
+  app.delete("/api/suggestions/:id", requireAuth, async (req, res) => {
+    try {
+      // Check if user owns the suggestion or is admin
+      const suggestions = await storage.getAllSuggestions();
+      const suggestion = suggestions.find(s => s.id === req.params.id);
+
+      if (!suggestion) {
+        return res.status(404).json({ message: "المقترح غير موجود" });
+      }
+
+      const isOwner = suggestion.userId === req.user!.id;
+      const isAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ message: "غير مصرح لك بحذف هذا المقترح" });
+      }
+
+      const success = await storage.deleteSuggestion(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "المقترح غير موجود" });
+      }
+
+      res.json({ message: "تم حذف المقترح بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في حذف المقترح" });
     }
   });
 
