@@ -6,10 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Building, Plus, Edit, Trash2, Users as UsersIcon, FileText } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Building, Plus, Edit, Trash2, Users as UsersIcon, FileText, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Company } from "@shared/schema";
+import type { Company, User, CompanyFile } from "@shared/schema";
 import Navigation from "@/components/navigation";
 import Sidebar from "@/components/sidebar";
 
@@ -20,6 +22,8 @@ export default function Companies() {
   const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false);
   const [isFilesDialogOpen, setIsFilesDialogOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [newFile, setNewFile] = useState({ name: "", fileUrl: "" });
   const [newCompany, setNewCompany] = useState({
     name: "",
     description: "",
@@ -75,6 +79,114 @@ export default function Companies() {
       toast({
         title: "تم الحذف",
         description: "تم حذف الشركة بنجاح",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "خطأ",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Fetch team members for selected company
+  const { data: teamMembers = [] } = useQuery<User[]>({
+    queryKey: [`/api/companies/${selectedCompany?.id}/team`],
+    enabled: !!selectedCompany && isTeamDialogOpen,
+  });
+
+  // Fetch all users to select from
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    enabled: isTeamDialogOpen,
+  });
+
+  // Add team member mutation
+  const addTeamMemberMutation = useMutation({
+    mutationFn: async ({ companyId, userId, role }: { companyId: string; userId: string; role: string }) => {
+      const res = await apiRequest("POST", `/api/companies/${companyId}/team`, { userId, role });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${selectedCompany?.id}/team`] });
+      setSelectedUserId("");
+      toast({
+        title: "تم إضافة العضو",
+        description: "تم إضافة عضو الفريق بنجاح",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "خطأ",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Remove team member mutation
+  const removeTeamMemberMutation = useMutation({
+    mutationFn: async ({ companyId, userId }: { companyId: string; userId: string }) => {
+      const res = await apiRequest("DELETE", `/api/companies/${companyId}/team/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${selectedCompany?.id}/team`] });
+      toast({
+        title: "تم إزالة العضو",
+        description: "تم إزالة عضو الفريق بنجاح",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "خطأ",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Fetch files for selected company
+  const { data: companyFiles = [] } = useQuery<CompanyFile[]>({
+    queryKey: [`/api/companies/${selectedCompany?.id}/files`],
+    enabled: !!selectedCompany && isFilesDialogOpen,
+  });
+
+  // Add file mutation
+  const addFileMutation = useMutation({
+    mutationFn: async ({ companyId, name, fileUrl }: { companyId: string; name: string; fileUrl: string }) => {
+      const res = await apiRequest("POST", `/api/companies/${companyId}/files`, { name, fileUrl });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${selectedCompany?.id}/files`] });
+      setNewFile({ name: "", fileUrl: "" });
+      toast({
+        title: "تم إضافة الملف",
+        description: "تم إضافة الملف بنجاح",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "خطأ",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete file mutation
+  const deleteFileMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      const res = await apiRequest("DELETE", `/api/companies/files/${fileId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/companies/${selectedCompany?.id}/files`] });
+      toast({
+        title: "تم حذف الملف",
+        description: "تم حذف الملف بنجاح",
       });
     },
     onError: (error: Error) => {
@@ -343,16 +455,97 @@ export default function Companies() {
 
       {/* Team Dialog */}
       <Dialog open={isTeamDialogOpen} onOpenChange={setIsTeamDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]" dir="rtl">
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>فريق الشركة</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               إدارة أعضاء فريق: {selectedCompany?.name}
             </p>
-            <div className="text-center py-4">
-              <p className="text-muted-foreground">ستتوفر هذه الميزة قريباً</p>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Add Team Member Section */}
+            <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+              <Label htmlFor="user-select">إضافة عضو جديد</Label>
+              <div className="flex gap-2">
+                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="اختر موظف" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allUsers
+                      .filter(user => !teamMembers.some(tm => tm.id === user.id))
+                      .map(user => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.fullName} - {user.department}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={() => {
+                    if (selectedUserId && selectedCompany) {
+                      addTeamMemberMutation.mutate({
+                        companyId: selectedCompany.id,
+                        userId: selectedUserId,
+                        role: "member"
+                      });
+                    }
+                  }}
+                  disabled={!selectedUserId || addTeamMemberMutation.isPending}
+                >
+                  <Plus className="ml-2 h-4 w-4" />
+                  إضافة
+                </Button>
+              </div>
+            </div>
+
+            {/* Team Members List */}
+            <div className="space-y-3">
+              <h3 className="font-semibold">أعضاء الفريق ({teamMembers.length})</h3>
+              {teamMembers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <UsersIcon className="mx-auto h-12 w-12 mb-2 opacity-50" />
+                  <p>لا يوجد أعضاء في الفريق</p>
+                  <p className="text-sm">ابدأ بإضافة أول عضو</p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {teamMembers.map(member => (
+                    <Card key={member.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={member.avatarUrl || undefined} />
+                              <AvatarFallback>{member.fullName?.[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{member.fullName}</p>
+                              <p className="text-sm text-muted-foreground">{member.department} - {member.jobTitle}</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              if (selectedCompany && confirm(`هل أنت متأكد من إزالة "${member.fullName}" من الفريق؟`)) {
+                                removeTeamMemberMutation.mutate({
+                                  companyId: selectedCompany.id,
+                                  userId: member.id
+                                });
+                              }
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -360,16 +553,107 @@ export default function Companies() {
 
       {/* Files Dialog */}
       <Dialog open={isFilesDialogOpen} onOpenChange={setIsFilesDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]" dir="rtl">
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>ملفات الشركة</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               إدارة ملفات: {selectedCompany?.name}
             </p>
-            <div className="text-center py-4">
-              <p className="text-muted-foreground">ستتوفر هذه الميزة قريباً</p>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Add File Section */}
+            <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+              <Label>إضافة ملف جديد</Label>
+              <div className="space-y-3">
+                <Input
+                  placeholder="اسم الملف"
+                  value={newFile.name}
+                  onChange={(e) => setNewFile({ ...newFile, name: e.target.value })}
+                />
+                <Input
+                  placeholder="رابط الملف (URL)"
+                  value={newFile.fileUrl}
+                  onChange={(e) => setNewFile({ ...newFile, fileUrl: e.target.value })}
+                />
+                <Button
+                  onClick={() => {
+                    if (newFile.name && newFile.fileUrl && selectedCompany) {
+                      addFileMutation.mutate({
+                        companyId: selectedCompany.id,
+                        name: newFile.name,
+                        fileUrl: newFile.fileUrl
+                      });
+                    }
+                  }}
+                  disabled={!newFile.name || !newFile.fileUrl || addFileMutation.isPending}
+                  className="w-full"
+                >
+                  <Plus className="ml-2 h-4 w-4" />
+                  إضافة الملف
+                </Button>
+              </div>
+            </div>
+
+            {/* Files List */}
+            <div className="space-y-3">
+              <h3 className="font-semibold">الملفات ({companyFiles.length})</h3>
+              {companyFiles.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="mx-auto h-12 w-12 mb-2 opacity-50" />
+                  <p>لا توجد ملفات</p>
+                  <p className="text-sm">ابدأ بإضافة أول ملف</p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {companyFiles.map(file => (
+                    <Card key={file.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <FileText className="h-8 w-8 text-primary flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate">{file.name}</p>
+                              <a
+                                href={file.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-blue-600 hover:underline truncate block"
+                              >
+                                {file.fileUrl}
+                              </a>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(file.createdAt).toLocaleDateString('ar-EG')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(file.fileUrl, '_blank')}
+                            >
+                              عرض
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => {
+                                if (confirm(`هل أنت متأكد من حذف الملف "${file.name}"؟`)) {
+                                  deleteFileMutation.mutate(file.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>

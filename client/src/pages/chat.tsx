@@ -11,10 +11,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { 
-  Send, MessageSquare, Users, Smile, Paperclip, Mic, 
+import {
+  Send, MessageSquare, Users, Smile, Paperclip, Mic,
   X, Reply, Image as ImageIcon, File, Download, AtSign,
-  Phone, PhoneOff, MoreVertical, Search, Video, Trash2
+  Phone, PhoneOff, MoreVertical, Search, Video, Trash2, Camera, Edit
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -90,6 +90,9 @@ export default function Chat() {
   const [isTyping, setIsTyping] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isEditPhotoOpen, setIsEditPhotoOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [showChatSearch, setShowChatSearch] = useState(false);
   const [reactionsDialogMessage, setReactionsDialogMessage] = useState<ChatMessage | null>(null);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -676,11 +679,23 @@ export default function Chat() {
                   className="p-4 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar className="ring-2 ring-primary/30">
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
-                        {selectedRoom.type === 'group' ? <Users className="w-4 h-4" /> : getRoomName(selectedRoom)[0]}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative">
+                      <Avatar className="ring-2 ring-primary/30">
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
+                          {selectedRoom.type === 'group' ? <Users className="w-4 h-4" /> : getRoomName(selectedRoom)[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      {selectedRoom.type === 'group' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-primary text-white hover:bg-primary/90"
+                          onClick={() => setIsEditPhotoOpen(true)}
+                        >
+                          <Camera className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                     <div>
                       <h3 className="font-bold text-lg">{getRoomName(selectedRoom)}</h3>
                       <div className="flex items-center gap-2">
@@ -692,7 +707,19 @@ export default function Chat() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {selectedRoom.type === 'private' && (
+                    {/* Search in chat */}
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowChatSearch(!showChatSearch)}
+                      >
+                        <Search className="w-4 h-4" />
+                      </Button>
+                    </motion.div>
+
+                    {/* Video/Voice call button for both private and group */}
+                    {selectedRoom.type === 'private' ? (
                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         <Button
                           variant={isInCall ? "destructive" : "outline"}
@@ -712,6 +739,24 @@ export default function Chat() {
                               <span>مكالمة</span>
                             </>
                           )}
+                        </Button>
+                      </motion.div>
+                    ) : (
+                      /* Group video call button */
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => {
+                            toast({
+                              title: "مكالمات المجموعة",
+                              description: "ستتوفر مكالمات الفيديو الجماعية قريباً",
+                            });
+                          }}
+                        >
+                          <Video className="w-4 h-4" />
+                          <span>مكالمة جماعية</span>
                         </Button>
                       </motion.div>
                     )}
@@ -739,10 +784,46 @@ export default function Chat() {
                   </div>
                 </motion.div>
 
+                {/* Chat Search Bar */}
+                {showChatSearch && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="p-3 border-b bg-muted/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Search className="w-4 h-4 text-muted-foreground" />
+                      <Input
+                        value={chatSearchQuery}
+                        onChange={(e) => setChatSearchQuery(e.target.value)}
+                        placeholder="ابحث في الرسائل..."
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setChatSearchQuery("");
+                          setShowChatSearch(false);
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+
                 <ScrollArea className="flex-1 p-4">
                   <div className="space-y-4">
                     <AnimatePresence mode="popLayout">
-                      {messages.map((message, index) => {
+                      {messages
+                        .filter(message =>
+                          !chatSearchQuery ||
+                          message.content.toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+                          message.senderName?.toLowerCase().includes(chatSearchQuery.toLowerCase())
+                        )
+                        .map((message, index) => {
                         const isOwnMessage = message.senderId === user?.id;
                         const replyMessage = getReplyMessage(message.replyTo);
                         
@@ -1073,7 +1154,43 @@ export default function Chat() {
                             handleSendMessage();
                           }
                         }}
-                        placeholder="اكتب رسالتك..."
+                        onPaste={async (e) => {
+                          const items = e.clipboardData?.items;
+                          if (!items) return;
+
+                          const imageItems = Array.from(items).filter(item =>
+                            item.type.startsWith('image/')
+                          );
+
+                          if (imageItems.length > 0) {
+                            e.preventDefault();
+                            const newAttachments = await Promise.all(
+                              imageItems.map(async (item) => {
+                                const file = item.getAsFile();
+                                if (!file) return null;
+
+                                const reader = new FileReader();
+                                return new Promise<any>((resolve) => {
+                                  reader.onloadend = () => {
+                                    resolve({
+                                      name: file.name || 'pasted-image.png',
+                                      type: 'image',
+                                      url: reader.result as string,
+                                      size: file.size,
+                                    });
+                                  };
+                                  reader.readAsDataURL(file);
+                                });
+                              })
+                            );
+                            setAttachments([...attachments, ...newAttachments.filter(Boolean)]);
+                            toast({
+                              title: "تم لصق الصورة",
+                              description: `تم إضافة ${imageItems.length} صورة من الحافظة`,
+                            });
+                          }
+                        }}
+                        placeholder="اكتب رسالتك... (يمكنك لصق الصور مباشرة)"
                         className="min-h-[44px] max-h-32 resize-none pr-10"
                         data-testid="input-message"
                       />
@@ -1191,6 +1308,49 @@ export default function Chat() {
               })}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Group Photo Dialog */}
+      <Dialog open={isEditPhotoOpen} onOpenChange={setIsEditPhotoOpen}>
+        <DialogContent className="sm:max-w-[425px]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>تحديث صورة المجموعة</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex flex-col items-center gap-4">
+              <Avatar className="w-24 h-24 ring-4 ring-primary/20">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-2xl">
+                  <Users className="w-12 h-12" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="text-center">
+                <h3 className="font-semibold">{selectedRoom?.name}</h3>
+                <p className="text-sm text-muted-foreground">صورة المجموعة الحالية</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label>رابط الصورة الجديدة (URL)</Label>
+              <Input
+                placeholder="https://example.com/image.jpg"
+              />
+              <Button className="w-full" onClick={() => {
+                toast({
+                  title: "قيد التطوير",
+                  description: "ميزة تحديث صورة المجموعة ستتوفر قريباً",
+                });
+                setIsEditPhotoOpen(false);
+              }}>
+                <Camera className="ml-2 h-4 w-4" />
+                تحديث الصورة
+              </Button>
+            </div>
+
+            <div className="text-center text-sm text-muted-foreground">
+              <p>أو اسحب صورة هنا للتحميل</p>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
