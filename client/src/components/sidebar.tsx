@@ -4,17 +4,18 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { 
-  Home, 
-  CheckSquare, 
-  Users, 
-  Clock, 
-  BarChart3, 
-  Calendar, 
-  Briefcase, 
+import {
+  Home,
+  CheckSquare,
+  Users,
+  Clock,
+  BarChart3,
+  Calendar,
+  Briefcase,
   Settings,
   ChevronLeft,
   Building,
+  Building2,
   FileText,
   UserCog,
   MessageSquare,
@@ -106,6 +107,12 @@ export default function Sidebar() {
       badge: totalTasks > 0 ? totalTasks.toString() : null,
     },
     {
+      name: "الشركات",
+      href: "/companies",
+      icon: Building,
+      badge: null,
+    },
+    {
       name: "الدردشة",
       href: "/chat",
       icon: MessageSquare,
@@ -135,7 +142,7 @@ export default function Sidebar() {
     {
       name: "لوحة المدير",
       href: "/admin",
-      icon: Building,
+      icon: Building2,
       badge: null,
     },
     {
@@ -602,6 +609,7 @@ export default function Sidebar() {
                 <Input
                   id="task-due-date"
                   type="date"
+                  min={new Date().toISOString().split('T')[0]}
                   value={newTask.dueDate}
                   onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
                   data-testid="input-task-due-date"

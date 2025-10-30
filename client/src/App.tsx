@@ -15,6 +15,7 @@ import HRManagement from "@/pages/hr-management";
 import UserManagement from "@/pages/user-management";
 import Chat from "@/pages/chat";
 import MyRequests from "@/pages/my-requests";
+import Companies from "@/pages/companies";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -26,6 +27,7 @@ function Router() {
       <ProtectedRoute path="/admin" component={AdminDashboard} />
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
       <ProtectedRoute path="/tasks" component={TaskManagement} />
+      <ProtectedRoute path="/companies" component={Companies} />
       <ProtectedRoute path="/profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/user-profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/reports" component={Reports} />

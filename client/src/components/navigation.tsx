@@ -273,8 +273,17 @@ export default function Navigation() {
                     {notifications.map((notification) => (
                       <div
                         key={notification.id}
-                        className={`p-4 cursor-pointer hover:bg-muted/50 ${!notification.isRead ? 'bg-muted/30' : ''}`}
-                        onClick={() => !notification.isRead && markAsReadMutation.mutate(notification.id)}
+                        className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${!notification.isRead ? 'bg-muted/30' : ''}`}
+                        onClick={() => {
+                          // Mark as read if unread
+                          if (!notification.isRead) {
+                            markAsReadMutation.mutate(notification.id);
+                          }
+                          // Navigate if there's a redirect URL in metadata
+                          if (notification.metadata && (notification.metadata as any).redirectUrl) {
+                            setLocation((notification.metadata as any).redirectUrl);
+                          }
+                        }}
                         data-testid={`notification-${notification.id}`}
                       >
                         <div className="flex items-start gap-3">
