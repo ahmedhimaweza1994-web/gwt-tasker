@@ -52,6 +52,34 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.get("/api/tasks/search", requireAuth, async (req, res) => {
+    try {
+      const query = (req.query.q as string || '').toLowerCase();
+      if (!query) {
+        return res.json([]);
+      }
+
+      // Get all tasks the user has access to
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+      const tasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      // Search in title, description, company name, and tags
+      const results = tasks.filter(task =>
+        task.title?.toLowerCase().includes(query) ||
+        task.description?.toLowerCase().includes(query) ||
+        task.companyName?.toLowerCase().includes(query) ||
+        task.tags?.some(tag => tag.toLowerCase().includes(query))
+      );
+
+      res.json(results);
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "حدث خطأ في البحث" });
+    }
+  });
+
   app.get("/api/tasks/:id", requireAuth, async (req, res) => {
     try {
       const task = await storage.getTask(req.params.id);
@@ -79,7 +107,8 @@ export function registerRoutes(app: Express): Server {
           task.assignedTo,
           "مهمة جديدة معينة لك",
           `تم تعيين مهمة "${task.title}" لك`,
-          "info"
+          "info",
+          { redirectUrl: `/tasks?taskId=${task.id}`, taskId: task.id, type: 'task_assigned' }
         );
       }
       
@@ -535,7 +564,8 @@ export function registerRoutes(app: Express): Server {
           admin.id,
           "طلب إجازة جديد",
           `${req.user!.fullName} قدم طلب إجازة جديد`,
-          "info"
+          "info",
+          { redirectUrl: `/employee-requests`, leaveId: leaveRequest.id, type: 'leave_request' }
         );
         
         // Broadcast notification via WebSocket
@@ -593,7 +623,8 @@ export function registerRoutes(app: Express): Server {
         leaveRequest.userId,
         "تحديث طلب الإجازة",
         `${statusText} طلب الإجازة الخاص بك`,
-        leaveRequest.status === 'approved' ? 'success' : 'error'
+        leaveRequest.status === 'approved' ? 'success' : 'error',
+        { redirectUrl: `/my-requests`, leaveId: leaveRequest.id, type: 'leave_status_update' }
       );
       
       // Broadcast notification via WebSocket
@@ -1000,6 +1031,56 @@ export function registerRoutes(app: Express): Server {
       res.json({ message: "تم حذف المقترح بنجاح" });
     } catch (error) {
       res.status(500).json({ message: "حدث خطأ في حذف المقترح" });
+    }
+  });
+
+  // Search routes
+  app.get("/api/search", requireAuth, async (req, res) => {
+    try {
+      const query = (req.query.q as string || '').toLowerCase();
+      if (!query) {
+        return res.json({ tasks: [], users: [], companies: [] });
+      }
+
+      // Search tasks
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+      const allTasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      const tasks = allTasks.filter(task =>
+        task.title?.toLowerCase().includes(query) ||
+        task.description?.toLowerCase().includes(query) ||
+        task.companyName?.toLowerCase().includes(query) ||
+        task.tags?.some(tag => tag.toLowerCase().includes(query))
+      );
+
+      // Search users
+      const allUsers = await storage.getUsers();
+      const users = allUsers.filter(user =>
+        user.fullName?.toLowerCase().includes(query) ||
+        user.email?.toLowerCase().includes(query) ||
+        user.department?.toLowerCase().includes(query)
+      ).map(user => ({
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        department: user.department,
+        profilePicture: user.profilePicture
+      }));
+
+      // Search companies
+      const allCompanies = await storage.getAllCompanies();
+      const companies = allCompanies.filter(company =>
+        company.name?.toLowerCase().includes(query) ||
+        company.description?.toLowerCase().includes(query) ||
+        company.industry?.toLowerCase().includes(query)
+      );
+
+      res.json({ tasks, users, companies });
+    } catch (error) {
+      console.error("Global search error:", error);
+      res.status(500).json({ message: "حدث خطأ في البحث" });
     }
   });
 

@@ -146,7 +146,7 @@ export interface IStorage {
   deleteSuggestion(id: string): Promise<boolean>;
 
   // Notifications
-  createNotification(userId: string, title: string, message: string, type: string): Promise<Notification>;
+  createNotification(userId: string, title: string, message: string, type: string, metadata?: any): Promise<Notification>;
   getUserNotifications(userId: string, unreadOnly?: boolean): Promise<Notification[]>;
   markNotificationRead(id: string): Promise<void>;
  
@@ -867,10 +867,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Notifications
-  async createNotification(userId: string, title: string, message: string, type: string): Promise<Notification> {
+  async createNotification(userId: string, title: string, message: string, type: string, metadata?: any): Promise<Notification> {
     const [notification] = await db
       .insert(notifications)
-      .values({ userId, title, message, type })
+      .values({ userId, title, message, type, metadata })
       .returning();
     return notification;
   }
