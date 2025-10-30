@@ -89,6 +89,10 @@ export default function Chat() {
   const [incomingCall, setIncomingCall] = useState<{ from: User; roomId: string } | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [reactionsDialogMessage, setReactionsDialogMessage] = useState<ChatMessage | null>(null);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -167,6 +171,27 @@ export default function Chat() {
     },
   });
 
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      const res = await apiRequest("DELETE", `/api/chat/messages/${messageId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/messages", selectedRoom?.id] });
+      toast({
+        title: "تم الحذف",
+        description: "تم حذف الرسالة بنجاح",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "خطأ",
+        description: "فشل حذف الرسالة",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -203,10 +228,13 @@ export default function Chat() {
         const blob = new Blob(chunks, { type: "audio/webm" });
         setRecordedAudio(blob);
         stream.getTracks().forEach((track) => track.stop());
+        setRecordingStartTime(null);
+        setRecordingDuration(0);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
+      setRecordingStartTime(Date.now());
     } catch (error) {
       toast({
         title: "خطأ",
@@ -222,6 +250,16 @@ export default function Chat() {
       setIsRecording(false);
     }
   };
+
+  // Update recording timer
+  useEffect(() => {
+    if (isRecording && recordingStartTime) {
+      const interval = setInterval(() => {
+        setRecordingDuration(Math.floor((Date.now() - recordingStartTime) / 1000));
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isRecording, recordingStartTime]);
 
   const handleSendMessage = async () => {
     if (!selectedRoom) return;
@@ -784,6 +822,7 @@ export default function Chat() {
                                             src={att.url}
                                             alt={att.name}
                                             className="rounded-lg max-w-xs hover:scale-105 transition-transform cursor-pointer"
+                                            onClick={() => setImagePreview(att.url)}
                                           />
                                         ) : att.type === "audio" ? (
                                           <div className="flex items-center gap-2 p-2 rounded-lg bg-background/10">
@@ -818,7 +857,8 @@ export default function Chat() {
                                   <motion.div
                                     initial={{ scale: 0 }}
                                     animate={{ scale: 1 }}
-                                    className="flex gap-1 bg-muted rounded-full px-2 py-1"
+                                    className="flex gap-1 bg-muted rounded-full px-2 py-1 cursor-pointer hover:bg-muted/80 transition-colors"
+                                    onClick={() => setReactionsDialogMessage(message)}
                                   >
                                     {message.reactions.slice(0, 3).map((reaction, i) => (
                                       <span key={i} className="text-sm">{reaction.emoji}</span>
@@ -830,7 +870,7 @@ export default function Chat() {
                                     )}
                                   </motion.div>
                                 )}
-                                
+
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                                   <Popover open={openReactionPopover === message.id} onOpenChange={(open) => setOpenReactionPopover(open ? message.id : null)}>
                                     <PopoverTrigger asChild>
@@ -861,6 +901,20 @@ export default function Chat() {
                                   >
                                     <Reply className="w-3 h-3" />
                                   </Button>
+                                  {isOwnMessage && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                      onClick={() => {
+                                        if (confirm("هل أنت متأكد من حذف هذه الرسالة؟")) {
+                                          deleteMessageMutation.mutate(message.id);
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -985,7 +1039,7 @@ export default function Chat() {
                           <Paperclip className="w-4 h-4" />
                         </Button>
                       </motion.div>
-                      <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+                      <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="relative">
                         <Button
                           variant="outline"
                           size="icon"
@@ -998,6 +1052,15 @@ export default function Chat() {
                         >
                           <Mic className="w-4 h-4" />
                         </Button>
+                        {isRecording && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-destructive text-white text-xs px-2 py-1 rounded-full whitespace-nowrap"
+                          >
+                            {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                          </motion.div>
+                        )}
                       </motion.div>
                     </div>
                     <div className="flex-1 relative">
@@ -1073,6 +1136,63 @@ export default function Chat() {
           </div>
         </main>
       </div>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!imagePreview} onOpenChange={() => setImagePreview(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>معاينة الصورة</DialogTitle>
+          </DialogHeader>
+          {imagePreview && (
+            <div className="flex items-center justify-center max-h-[70vh]">
+              <img
+                src={imagePreview}
+                alt="Preview"
+                className="max-w-full max-h-full rounded-lg"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reactions Dialog */}
+      <Dialog open={!!reactionsDialogMessage} onOpenChange={() => setReactionsDialogMessage(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>التفاعلات</DialogTitle>
+          </DialogHeader>
+          {reactionsDialogMessage && reactionsDialogMessage.reactions && (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {reactionsDialogMessage.reactions.map((reaction, index) => {
+                // Find the user who reacted
+                const reactingUser = users.find(u => u.id === reaction.userId);
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarFallback className="bg-primary/10">
+                          {reactingUser?.fullName?.[0] || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{reactingUser?.fullName || 'مستخدم'}</p>
+                        <p className="text-sm text-muted-foreground">{reactingUser?.email || ''}</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl">{reaction.emoji}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
