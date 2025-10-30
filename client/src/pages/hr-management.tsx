@@ -108,52 +108,56 @@ export default function HRManagement() {
   });
 
   // Fetch pending leave requests (admin only)
-  const { data: pendingLeaveRequests = [] } = useQuery<LeaveRequest[]>({
+  const { data: pendingLeaveRequests = [], isLoading: isLoadingLeaves } = useQuery<LeaveRequest[]>({
     queryKey: ["/api/leaves/pending"],
     enabled: isAdmin,
   });
 
   // Fetch pending salary advance requests (admin only)
-  const { data: pendingSalaryAdvances = [] } = useQuery<SalaryAdvanceRequest[]>({
+  const { data: pendingSalaryAdvances = [], isLoading: isLoadingAdvances } = useQuery<SalaryAdvanceRequest[]>({
     queryKey: ["/api/salary-advances/pending"],
     enabled: isAdmin,
   });
 
   // Fetch user's own leave requests (employee)
-  const { data: userLeaveRequests = [] } = useQuery<LeaveRequest[]>({
+  const { data: userLeaveRequests = [], isLoading: isLoadingUserLeaves } = useQuery<LeaveRequest[]>({
     queryKey: ["/api/leaves"],
     enabled: !isAdmin,
   });
 
   // Fetch user's own salary advance requests (employee)
-  const { data: userSalaryAdvances = [] } = useQuery<SalaryAdvanceRequest[]>({
+  const { data: userSalaryAdvances = [], isLoading: isLoadingUserAdvances } = useQuery<SalaryAdvanceRequest[]>({
     queryKey: ["/api/salary-advances/user"],
     enabled: !isAdmin,
   });
 
   // Fetch all users for HR purposes (admin only)
-  const { data: allUsers = [] } = useQuery<User[]>({
+  const { data: allUsers = [], isLoading: isLoadingUsers } = useQuery<User[]>({
     queryKey: ["/api/users"],
     enabled: isAdmin,
   });
 
   // Fetch HR stats (admin only)
-  const { data: hrStats } = useQuery<HRStats>({
+  const { data: hrStats, isLoading: isLoadingStats } = useQuery<HRStats>({
     queryKey: ["/api/hr/stats"],
     enabled: isAdmin,
   });
 
   // Fetch payroll data (admin only)
-  const { data: payrollData = [] } = useQuery<PayrollEntry[]>({
+  const { data: payrollData = [], isLoading: isLoadingPayroll } = useQuery<PayrollEntry[]>({
     queryKey: ["/api/hr/payroll"],
     enabled: isAdmin,
   });
 
   // Fetch HR reports (admin only)
-  const { data: hrReports } = useQuery<HRReports>({
+  const { data: hrReports, isLoading: isLoadingReports } = useQuery<HRReports>({
     queryKey: ["/api/hr/reports"],
     enabled: isAdmin,
   });
+
+  const isLoading = isLoadingLeaves || isLoadingAdvances || isLoadingUserLeaves ||
+                    isLoadingUserAdvances || isLoadingUsers || isLoadingStats ||
+                    isLoadingPayroll || isLoadingReports;
 
   // Employee leave request mutation
   const createLeaveRequestMutation = useMutation({
@@ -683,6 +687,13 @@ export default function HRManagement() {
         <Sidebar />
         
         <main className={cn("flex-1 p-6 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent mb-4"></div>
+              <p className="text-muted-foreground">جاري تحميل البيانات...</p>
+            </div>
+          ) : (
+            <>
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -1224,6 +1235,8 @@ export default function HRManagement() {
               </div>
             </TabsContent>
           </Tabs>
+            </>
+          )}
         </main>
       </div>
 

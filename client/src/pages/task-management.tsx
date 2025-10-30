@@ -38,21 +38,24 @@ export default function TaskManagement() {
   const [userFilter, setUserFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
 
-  const { data: tasks = [] } = useQuery<Task[]>({
+  const { data: tasks = [], isLoading: isLoadingTasks, isError: isErrorTasks } = useQuery<Task[]>({
     queryKey: ["/api/tasks"],
     enabled: user?.role === 'admin' || user?.role === 'sub-admin',
   });
-  const { data: myTasks = [] } = useQuery<Task[]>({
+  const { data: myTasks = [], isLoading: isLoadingMyTasks, isError: isErrorMyTasks } = useQuery<Task[]>({
     queryKey: ["/api/tasks/my"],
     enabled: user?.role !== 'admin' && user?.role !== 'sub-admin',
   });
-  const { data: assignedTasks = [] } = useQuery<Task[]>({
+  const { data: assignedTasks = [], isLoading: isLoadingAssignedTasks, isError: isErrorAssignedTasks } = useQuery<Task[]>({
     queryKey: ["/api/tasks/assigned"],
     enabled: user?.role !== 'admin' && user?.role !== 'sub-admin',
   });
-  const { data: users = [] } = useQuery<User[]>({
+  const { data: users = [], isLoading: isLoadingUsers } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
+
+  const isLoading = isLoadingTasks || isLoadingMyTasks || isLoadingAssignedTasks || isLoadingUsers;
+  const isError = isErrorTasks || isErrorMyTasks || isErrorAssignedTasks;
 
   const createTaskMutation = useMutation({
     mutationFn: async (taskData: any) => {
@@ -343,6 +346,24 @@ export default function TaskManagement() {
             </CardContent>
           </Card>
 
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent mb-4"></div>
+              <p className="text-muted-foreground">جاري تحميل المهام...</p>
+            </div>
+          ) : isError ? (
+            <div className="text-center py-12">
+              <p className="text-destructive mb-4">حدث خطأ في تحميل المهام</p>
+              <Button onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/tasks/my"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/tasks/assigned"] });
+              }}>
+                إعادة المحاولة
+              </Button>
+            </div>
+          ) : (
+            <>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card className="hover:shadow-lg transition-shadow" data-testid="card-pending-tasks-count">
               <CardHeader className="pb-2">
@@ -411,6 +432,8 @@ export default function TaskManagement() {
             underReviewTasks={underReviewTasks}
             completedTasks={completedTasks}
           />
+            </>
+          )}
         </main>
       </div>
     </div>

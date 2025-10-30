@@ -39,7 +39,8 @@ export function registerRoutes(app: Express): Server {
       const tasks = await storage.getUserTasks(req.user!.id);
       res.json(tasks);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في جلب المهام" });
+      console.error('Error fetching user tasks:', error);
+      res.status(500).json({ message: "حدث خطأ في جلب المهام", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -48,7 +49,8 @@ export function registerRoutes(app: Express): Server {
       const tasks = await storage.getAssignedTasks(req.user!.id);
       res.json(tasks);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في جلب المهام المعينة" });
+      console.error('Error fetching assigned tasks:', error);
+      res.status(500).json({ message: "حدث خطأ في جلب المهام المعينة", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -558,7 +560,8 @@ export function registerRoutes(app: Express): Server {
       // Notify admins
       const admins = await storage.getUsers();
       const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
-      
+
+      const notifications = [];
       for (const admin of adminUsers) {
         const notification = await storage.createNotification(
           admin.id,
@@ -567,13 +570,17 @@ export function registerRoutes(app: Express): Server {
           "info",
           { redirectUrl: `/employee-requests`, leaveId: leaveRequest.id, type: 'leave_request' }
         );
-        
-        // Broadcast notification via WebSocket
+        notifications.push(notification);
+      }
+
+      // Broadcast notifications via WebSocket
+      // Each client should filter notifications based on userId
+      if (notifications.length > 0) {
         wss.clients.forEach((client) => {
           if (client.readyState === client.OPEN) {
             client.send(JSON.stringify({
-              type: 'new_notification',
-              data: notification
+              type: 'new_notifications',
+              data: notifications
             }));
           }
         });
@@ -639,7 +646,8 @@ export function registerRoutes(app: Express): Server {
       
       res.json(leaveRequest);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في تحديث طلب الإجازة" });
+      console.error('Error updating leave request:', error);
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب الإجازة", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -652,10 +660,39 @@ export function registerRoutes(app: Express): Server {
         reason: req.body.reason,
         repaymentDate: req.body.repaymentDate ? new Date(req.body.repaymentDate) : null,
       });
-      
+
+      // Notify admins
+      const admins = await storage.getUsers();
+      const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
+
+      const notifications = [];
+      for (const admin of adminUsers) {
+        const notification = await storage.createNotification(
+          admin.id,
+          "طلب سلفة جديد",
+          `${req.user!.fullName} قدم طلب سلفة جديد`,
+          "info",
+          { redirectUrl: `/employee-requests`, advanceId: advanceRequest.id, type: 'salary_advance_request' }
+        );
+        notifications.push(notification);
+      }
+
+      // Broadcast notifications via WebSocket
+      if (notifications.length > 0) {
+        wss.clients.forEach((client) => {
+          if (client.readyState === client.OPEN) {
+            client.send(JSON.stringify({
+              type: 'new_notifications',
+              data: notifications
+            }));
+          }
+        });
+      }
+
       res.status(201).json(advanceRequest);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في إنشاء طلب السلفة" });
+      console.error('Error creating salary advance:', error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء طلب السلفة", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -692,16 +729,28 @@ export function registerRoutes(app: Express): Server {
 
       // Notify employee
       const statusText = advanceRequest.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
-      await storage.createNotification(
+      const notification = await storage.createNotification(
         advanceRequest.userId,
         "تحديث طلب السلفة",
         `${statusText} طلب السلفة الخاص بك`,
-        advanceRequest.status === 'approved' ? 'success' : 'error'
+        advanceRequest.status === 'approved' ? 'success' : 'error',
+        { redirectUrl: `/my-requests`, advanceId: advanceRequest.id, type: 'salary_advance_status_update' }
       );
+
+      // Broadcast notification via WebSocket
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_notification',
+            data: notification
+          }));
+        }
+      });
 
       res.json(advanceRequest);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في تحديث طلب السلفة" });
+      console.error('Error updating salary advance:', error);
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب السلفة", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -719,13 +768,28 @@ export function registerRoutes(app: Express): Server {
       const admins = await storage.getUsers();
       const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
 
+      const notifications = [];
       for (const admin of adminUsers) {
-        await storage.createNotification(
+        const notification = await storage.createNotification(
           admin.id,
           "طلب خصم جديد",
           `${req.user!.fullName} قدم طلب خصم جديد`,
-          "info"
+          "info",
+          { redirectUrl: `/employee-requests`, deductionId: deduction.id, type: 'deduction_request' }
         );
+        notifications.push(notification);
+      }
+
+      // Broadcast notifications via WebSocket
+      if (notifications.length > 0) {
+        wss.clients.forEach((client) => {
+          if (client.readyState === client.OPEN) {
+            client.send(JSON.stringify({
+              type: 'new_notifications',
+              data: notifications
+            }));
+          }
+        });
       }
 
       res.status(201).json(deduction);
@@ -777,16 +841,28 @@ export function registerRoutes(app: Express): Server {
 
       // Notify employee
       const statusText = deduction.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
-      await storage.createNotification(
+      const notification = await storage.createNotification(
         deduction.userId,
         "تحديث طلب الخصم",
         `${statusText} طلب الخصم الخاص بك`,
-        deduction.status === 'approved' ? 'success' : 'error'
+        deduction.status === 'approved' ? 'success' : 'error',
+        { redirectUrl: `/my-requests`, deductionId: deduction.id, type: 'deduction_status_update' }
       );
+
+      // Broadcast notification via WebSocket
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_notification',
+            data: notification
+          }));
+        }
+      });
 
       res.json(deduction);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في تحديث طلب الخصم" });
+      console.error('Error updating deduction:', error);
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب الخصم", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 

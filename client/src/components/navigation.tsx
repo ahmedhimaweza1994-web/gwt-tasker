@@ -104,12 +104,28 @@ export default function Navigation() {
           // Refresh notifications list
           queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
         }
+      } else if (lastMessage.type === 'new_notifications' && lastMessage.data) {
+        // Handle batch notifications (array)
+        const notifications = lastMessage.data as Notification[];
+        // Filter and show only notifications for current user
+        const userNotifications = notifications.filter(n => n.userId === user?.id);
+        userNotifications.forEach(notification => {
+          toast({
+            title: notification.title,
+            description: notification.message,
+            variant: notification.type === 'error' ? 'destructive' : 'default',
+          });
+        });
+        if (userNotifications.length > 0) {
+          // Refresh notifications list
+          queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+        }
       } else if (lastMessage.type === 'new_message' && lastMessage.data) {
         // Refresh notifications when new messages arrive (might trigger message notifications)
         queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       }
     }
-  }, [lastMessage, user, toast]);
+  }, [lastMessage, user, toast, queryClient]);
 
   useEffect(() => {
     const darkMode = localStorage.getItem('darkMode') === 'true';
