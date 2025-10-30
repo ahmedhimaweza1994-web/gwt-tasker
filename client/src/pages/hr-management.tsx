@@ -269,6 +269,13 @@ export default function HRManagement() {
         description: "تم إضافة الموظف الجديد بنجاح",
       });
     },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إضافة الموظف",
+        variant: "destructive",
+      });
+    },
   });
 
   // Update employee mutation

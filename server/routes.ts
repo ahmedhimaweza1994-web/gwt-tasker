@@ -426,7 +426,10 @@ export function registerRoutes(app: Express): Server {
       });
     } catch (error) {
       console.error("Error creating employee:", error);
-      res.status(500).json({ message: "حدث خطأ في إضافة الموظف" });
+      res.status(500).json({
+        message: "حدث خطأ في إضافة الموظف",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

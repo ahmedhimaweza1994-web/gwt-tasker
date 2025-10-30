@@ -27,7 +27,7 @@ import type { Notification, Task, User as UserType } from "@shared/schema";
 
 export default function Navigation() {
   const { user, logoutMutation } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [isDark, setIsDark] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -88,6 +88,38 @@ export default function Navigation() {
       setShowSearchResults(false);
     }
   }, [searchTerm]);
+
+  // Auto-mark notifications as read when navigating to related pages
+  useEffect(() => {
+    if (!location || !notifications.length) return;
+
+    // Map routes to notification types that should be auto-marked as read
+    const routeToNotificationTypes: Record<string, string[]> = {
+      '/tasks': ['task_assigned', 'task_status_update', 'task'],
+      '/chat': ['new_message', 'message'],
+      '/employee-requests': ['leave_request', 'salary_advance_request', 'deduction_request'],
+      '/my-requests': ['leave_status_update', 'salary_advance_status_update', 'deduction_status_update'],
+      '/hr-management': ['leave_request', 'salary_advance_request', 'deduction_request'],
+      '/companies': ['company'],
+      '/suggestions': ['suggestion'],
+    };
+
+    // Get notification types for current route
+    const notificationTypes = routeToNotificationTypes[location];
+    if (!notificationTypes) return;
+
+    // Find unread notifications matching current route
+    const notificationsToMark = unreadNotifications.filter(notification => {
+      const metadata = notification.metadata as any;
+      if (!metadata?.type) return false;
+      return notificationTypes.includes(metadata.type);
+    });
+
+    // Mark each matching notification as read
+    notificationsToMark.forEach(notification => {
+      markAsReadMutation.mutate(notification.id);
+    });
+  }, [location, notifications]);
 
   // Listen for real-time notifications via WebSocket
   useEffect(() => {

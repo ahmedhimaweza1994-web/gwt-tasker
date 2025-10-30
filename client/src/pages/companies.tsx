@@ -16,6 +16,10 @@ import Sidebar from "@/components/sidebar";
 export default function Companies() {
   const { toast } = useToast();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false);
+  const [isFilesDialogOpen, setIsFilesDialogOpen] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [newCompany, setNewCompany] = useState({
     name: "",
     description: "",
@@ -260,17 +264,41 @@ export default function Companies() {
                       )}
                     </div>
                     <div className="flex gap-2 pt-4 border-t">
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setSelectedCompany(company);
+                          setIsTeamDialogOpen(true);
+                        }}
+                      >
                         <UsersIcon className="ml-2 h-4 w-4" />
                         الفريق
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setSelectedCompany(company);
+                          setIsFilesDialogOpen(true);
+                        }}
+                      >
                         <FileText className="ml-2 h-4 w-4" />
                         الملفات
                       </Button>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" className="flex-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setSelectedCompany(company);
+                          setIsEditDialogOpen(true);
+                        }}
+                      >
                         <Edit className="ml-2 h-4 w-4" />
                         تعديل
                       </Button>
@@ -295,6 +323,57 @@ export default function Companies() {
           )}
         </div>
       </main>
+
+      {/* Edit Company Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>تعديل بيانات الشركة</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              تحديث معلومات الشركة: {selectedCompany?.name}
+            </p>
+            <div className="text-center py-4">
+              <p className="text-muted-foreground">ستتوفر هذه الميزة قريباً</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Team Dialog */}
+      <Dialog open={isTeamDialogOpen} onOpenChange={setIsTeamDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>فريق الشركة</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              إدارة أعضاء فريق: {selectedCompany?.name}
+            </p>
+            <div className="text-center py-4">
+              <p className="text-muted-foreground">ستتوفر هذه الميزة قريباً</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Files Dialog */}
+      <Dialog open={isFilesDialogOpen} onOpenChange={setIsFilesDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>ملفات الشركة</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              إدارة ملفات: {selectedCompany?.name}
+            </p>
+            <div className="text-center py-4">
+              <p className="text-muted-foreground">ستتوفر هذه الميزة قريباً</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
