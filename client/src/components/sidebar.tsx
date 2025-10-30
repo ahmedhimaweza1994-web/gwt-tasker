@@ -20,7 +20,8 @@ import {
   UserCog,
   MessageSquare,
   DollarSign,
-  AlertCircle
+  AlertCircle,
+  Lightbulb
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLocation } from "wouter";
@@ -128,6 +129,12 @@ export default function Sidebar() {
       name: "التقارير",
       href: "/reports",
       icon: BarChart3,
+      badge: null,
+    },
+    {
+      name: "المقترحات",
+      href: "/suggestions",
+      icon: Lightbulb,
       badge: null,
     },
     {
