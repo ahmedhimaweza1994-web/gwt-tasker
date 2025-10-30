@@ -16,6 +16,7 @@ import UserManagement from "@/pages/user-management";
 import Chat from "@/pages/chat";
 import MyRequests from "@/pages/my-requests";
 import Companies from "@/pages/companies";
+import AIModels from "@/pages/ai-models";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -35,6 +36,7 @@ function Router() {
       <ProtectedRoute path="/user-management" component={UserManagement} />
       <ProtectedRoute path="/chat" component={Chat} />
       <ProtectedRoute path="/my-requests" component={MyRequests} />
+      <ProtectedRoute path="/ai-models" component={AIModels} />
       <ProtectedRoute path="/settings" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>

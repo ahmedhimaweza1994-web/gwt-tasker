@@ -64,6 +64,28 @@ body {
   font-family: "Noto Sans Arabic", "Inter", system-ui, sans-serif;
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+  overflow-x: hidden;
+}
+
+/* Fix oversized layout - ensure content fits viewport */
+main {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Prevent content overflow */
+.container {
+  max-width: 100%;
+}
+
+/* Fix for RTL tables */
+table {
+  direction: rtl;
+  text-align: right;
+}
+
+table th, table td {
+  text-align: right;
 }
 
 /* Custom scrollbar */
