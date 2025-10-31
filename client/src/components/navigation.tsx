@@ -27,7 +27,7 @@ import type { Notification, Task, User as UserType } from "@shared/schema";
 
 export default function Navigation() {
   const { user, logoutMutation } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [isDark, setIsDark] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -89,6 +89,38 @@ export default function Navigation() {
     }
   }, [searchTerm]);
 
+  // Auto-mark notifications as read when navigating to related pages
+  useEffect(() => {
+    if (!location || !notifications.length) return;
+
+    // Map routes to notification types that should be auto-marked as read
+    const routeToNotificationTypes: Record<string, string[]> = {
+      '/tasks': ['task_assigned', 'task_status_update', 'task'],
+      '/chat': ['new_message', 'message'],
+      '/employee-requests': ['leave_request', 'salary_advance_request', 'deduction_request'],
+      '/my-requests': ['leave_status_update', 'salary_advance_status_update', 'deduction_status_update'],
+      '/hr-management': ['leave_request', 'salary_advance_request', 'deduction_request'],
+      '/companies': ['company'],
+      '/suggestions': ['suggestion'],
+    };
+
+    // Get notification types for current route
+    const notificationTypes = routeToNotificationTypes[location];
+    if (!notificationTypes) return;
+
+    // Find unread notifications matching current route
+    const notificationsToMark = unreadNotifications.filter(notification => {
+      const metadata = notification.metadata as any;
+      if (!metadata?.type) return false;
+      return notificationTypes.includes(metadata.type);
+    });
+
+    // Mark each matching notification as read
+    notificationsToMark.forEach(notification => {
+      markAsReadMutation.mutate(notification.id);
+    });
+  }, [location, notifications]);
+
   // Listen for real-time notifications via WebSocket
   useEffect(() => {
     if (lastMessage) {
@@ -104,12 +136,28 @@ export default function Navigation() {
           // Refresh notifications list
           queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
         }
+      } else if (lastMessage.type === 'new_notifications' && lastMessage.data) {
+        // Handle batch notifications (array)
+        const notifications = lastMessage.data as Notification[];
+        // Filter and show only notifications for current user
+        const userNotifications = notifications.filter(n => n.userId === user?.id);
+        userNotifications.forEach(notification => {
+          toast({
+            title: notification.title,
+            description: notification.message,
+            variant: notification.type === 'error' ? 'destructive' : 'default',
+          });
+        });
+        if (userNotifications.length > 0) {
+          // Refresh notifications list
+          queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+        }
       } else if (lastMessage.type === 'new_message' && lastMessage.data) {
         // Refresh notifications when new messages arrive (might trigger message notifications)
         queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       }
     }
-  }, [lastMessage, user, toast]);
+  }, [lastMessage, user, toast, queryClient]);
 
   useEffect(() => {
     const darkMode = localStorage.getItem('darkMode') === 'true';
@@ -273,8 +321,17 @@ export default function Navigation() {
                     {notifications.map((notification) => (
                       <div
                         key={notification.id}
-                        className={`p-4 cursor-pointer hover:bg-muted/50 ${!notification.isRead ? 'bg-muted/30' : ''}`}
-                        onClick={() => !notification.isRead && markAsReadMutation.mutate(notification.id)}
+                        className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${!notification.isRead ? 'bg-muted/30' : ''}`}
+                        onClick={() => {
+                          // Mark as read if unread
+                          if (!notification.isRead) {
+                            markAsReadMutation.mutate(notification.id);
+                          }
+                          // Navigate if there's a redirect URL in metadata
+                          if (notification.metadata && (notification.metadata as any).redirectUrl) {
+                            setLocation((notification.metadata as any).redirectUrl);
+                          }
+                        }}
                         data-testid={`notification-${notification.id}`}
                       >
                         <div className="flex items-start gap-3">

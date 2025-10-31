@@ -11,10 +11,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { 
-  Send, MessageSquare, Users, Smile, Paperclip, Mic, 
+import {
+  Send, MessageSquare, Users, Smile, Paperclip, Mic,
   X, Reply, Image as ImageIcon, File, Download, AtSign,
-  Phone, PhoneOff, MoreVertical, Search, Video, Trash2
+  Phone, PhoneOff, MoreVertical, Search, Video, Trash2, Camera, Edit
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -89,6 +89,13 @@ export default function Chat() {
   const [incomingCall, setIncomingCall] = useState<{ from: User; roomId: string } | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isEditPhotoOpen, setIsEditPhotoOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [showChatSearch, setShowChatSearch] = useState(false);
+  const [reactionsDialogMessage, setReactionsDialogMessage] = useState<ChatMessage | null>(null);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -167,6 +174,27 @@ export default function Chat() {
     },
   });
 
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      const res = await apiRequest("DELETE", `/api/chat/messages/${messageId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/messages", selectedRoom?.id] });
+      toast({
+        title: "تم الحذف",
+        description: "تم حذف الرسالة بنجاح",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "خطأ",
+        description: "فشل حذف الرسالة",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -203,10 +231,13 @@ export default function Chat() {
         const blob = new Blob(chunks, { type: "audio/webm" });
         setRecordedAudio(blob);
         stream.getTracks().forEach((track) => track.stop());
+        setRecordingStartTime(null);
+        setRecordingDuration(0);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
+      setRecordingStartTime(Date.now());
     } catch (error) {
       toast({
         title: "خطأ",
@@ -222,6 +253,16 @@ export default function Chat() {
       setIsRecording(false);
     }
   };
+
+  // Update recording timer
+  useEffect(() => {
+    if (isRecording && recordingStartTime) {
+      const interval = setInterval(() => {
+        setRecordingDuration(Math.floor((Date.now() - recordingStartTime) / 1000));
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isRecording, recordingStartTime]);
 
   const handleSendMessage = async () => {
     if (!selectedRoom) return;
@@ -638,11 +679,23 @@ export default function Chat() {
                   className="p-4 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar className="ring-2 ring-primary/30">
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
-                        {selectedRoom.type === 'group' ? <Users className="w-4 h-4" /> : getRoomName(selectedRoom)[0]}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative">
+                      <Avatar className="ring-2 ring-primary/30">
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
+                          {selectedRoom.type === 'group' ? <Users className="w-4 h-4" /> : getRoomName(selectedRoom)[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      {selectedRoom.type === 'group' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-primary text-white hover:bg-primary/90"
+                          onClick={() => setIsEditPhotoOpen(true)}
+                        >
+                          <Camera className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                     <div>
                       <h3 className="font-bold text-lg">{getRoomName(selectedRoom)}</h3>
                       <div className="flex items-center gap-2">
@@ -654,7 +707,19 @@ export default function Chat() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {selectedRoom.type === 'private' && (
+                    {/* Search in chat */}
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowChatSearch(!showChatSearch)}
+                      >
+                        <Search className="w-4 h-4" />
+                      </Button>
+                    </motion.div>
+
+                    {/* Video/Voice call button for both private and group */}
+                    {selectedRoom.type === 'private' ? (
                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         <Button
                           variant={isInCall ? "destructive" : "outline"}
@@ -674,6 +739,24 @@ export default function Chat() {
                               <span>مكالمة</span>
                             </>
                           )}
+                        </Button>
+                      </motion.div>
+                    ) : (
+                      /* Group video call button */
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => {
+                            toast({
+                              title: "مكالمات المجموعة",
+                              description: "ستتوفر مكالمات الفيديو الجماعية قريباً",
+                            });
+                          }}
+                        >
+                          <Video className="w-4 h-4" />
+                          <span>مكالمة جماعية</span>
                         </Button>
                       </motion.div>
                     )}
@@ -701,10 +784,46 @@ export default function Chat() {
                   </div>
                 </motion.div>
 
+                {/* Chat Search Bar */}
+                {showChatSearch && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="p-3 border-b bg-muted/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Search className="w-4 h-4 text-muted-foreground" />
+                      <Input
+                        value={chatSearchQuery}
+                        onChange={(e) => setChatSearchQuery(e.target.value)}
+                        placeholder="ابحث في الرسائل..."
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setChatSearchQuery("");
+                          setShowChatSearch(false);
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+
                 <ScrollArea className="flex-1 p-4">
                   <div className="space-y-4">
                     <AnimatePresence mode="popLayout">
-                      {messages.map((message, index) => {
+                      {messages
+                        .filter(message =>
+                          !chatSearchQuery ||
+                          message.content.toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+                          message.senderName?.toLowerCase().includes(chatSearchQuery.toLowerCase())
+                        )
+                        .map((message, index) => {
                         const isOwnMessage = message.senderId === user?.id;
                         const replyMessage = getReplyMessage(message.replyTo);
                         
@@ -784,6 +903,7 @@ export default function Chat() {
                                             src={att.url}
                                             alt={att.name}
                                             className="rounded-lg max-w-xs hover:scale-105 transition-transform cursor-pointer"
+                                            onClick={() => setImagePreview(att.url)}
                                           />
                                         ) : att.type === "audio" ? (
                                           <div className="flex items-center gap-2 p-2 rounded-lg bg-background/10">
@@ -818,7 +938,8 @@ export default function Chat() {
                                   <motion.div
                                     initial={{ scale: 0 }}
                                     animate={{ scale: 1 }}
-                                    className="flex gap-1 bg-muted rounded-full px-2 py-1"
+                                    className="flex gap-1 bg-muted rounded-full px-2 py-1 cursor-pointer hover:bg-muted/80 transition-colors"
+                                    onClick={() => setReactionsDialogMessage(message)}
                                   >
                                     {message.reactions.slice(0, 3).map((reaction, i) => (
                                       <span key={i} className="text-sm">{reaction.emoji}</span>
@@ -830,7 +951,7 @@ export default function Chat() {
                                     )}
                                   </motion.div>
                                 )}
-                                
+
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                                   <Popover open={openReactionPopover === message.id} onOpenChange={(open) => setOpenReactionPopover(open ? message.id : null)}>
                                     <PopoverTrigger asChild>
@@ -861,6 +982,20 @@ export default function Chat() {
                                   >
                                     <Reply className="w-3 h-3" />
                                   </Button>
+                                  {isOwnMessage && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                      onClick={() => {
+                                        if (confirm("هل أنت متأكد من حذف هذه الرسالة؟")) {
+                                          deleteMessageMutation.mutate(message.id);
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -985,7 +1120,7 @@ export default function Chat() {
                           <Paperclip className="w-4 h-4" />
                         </Button>
                       </motion.div>
-                      <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+                      <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="relative">
                         <Button
                           variant="outline"
                           size="icon"
@@ -998,6 +1133,15 @@ export default function Chat() {
                         >
                           <Mic className="w-4 h-4" />
                         </Button>
+                        {isRecording && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-destructive text-white text-xs px-2 py-1 rounded-full whitespace-nowrap"
+                          >
+                            {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+                          </motion.div>
+                        )}
                       </motion.div>
                     </div>
                     <div className="flex-1 relative">
@@ -1010,7 +1154,43 @@ export default function Chat() {
                             handleSendMessage();
                           }
                         }}
-                        placeholder="اكتب رسالتك..."
+                        onPaste={async (e) => {
+                          const items = e.clipboardData?.items;
+                          if (!items) return;
+
+                          const imageItems = Array.from(items).filter(item =>
+                            item.type.startsWith('image/')
+                          );
+
+                          if (imageItems.length > 0) {
+                            e.preventDefault();
+                            const newAttachments = await Promise.all(
+                              imageItems.map(async (item) => {
+                                const file = item.getAsFile();
+                                if (!file) return null;
+
+                                const reader = new FileReader();
+                                return new Promise<any>((resolve) => {
+                                  reader.onloadend = () => {
+                                    resolve({
+                                      name: file.name || 'pasted-image.png',
+                                      type: 'image',
+                                      url: reader.result as string,
+                                      size: file.size,
+                                    });
+                                  };
+                                  reader.readAsDataURL(file);
+                                });
+                              })
+                            );
+                            setAttachments([...attachments, ...newAttachments.filter(Boolean)]);
+                            toast({
+                              title: "تم لصق الصورة",
+                              description: `تم إضافة ${imageItems.length} صورة من الحافظة`,
+                            });
+                          }
+                        }}
+                        placeholder="اكتب رسالتك... (يمكنك لصق الصور مباشرة)"
                         className="min-h-[44px] max-h-32 resize-none pr-10"
                         data-testid="input-message"
                       />
@@ -1073,6 +1253,106 @@ export default function Chat() {
           </div>
         </main>
       </div>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!imagePreview} onOpenChange={() => setImagePreview(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>معاينة الصورة</DialogTitle>
+          </DialogHeader>
+          {imagePreview && (
+            <div className="flex items-center justify-center max-h-[70vh]">
+              <img
+                src={imagePreview}
+                alt="Preview"
+                className="max-w-full max-h-full rounded-lg"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reactions Dialog */}
+      <Dialog open={!!reactionsDialogMessage} onOpenChange={() => setReactionsDialogMessage(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>التفاعلات</DialogTitle>
+          </DialogHeader>
+          {reactionsDialogMessage && reactionsDialogMessage.reactions && (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {reactionsDialogMessage.reactions.map((reaction, index) => {
+                // Find the user who reacted
+                const reactingUser = users.find(u => u.id === reaction.userId);
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarFallback className="bg-primary/10">
+                          {reactingUser?.fullName?.[0] || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{reactingUser?.fullName || 'مستخدم'}</p>
+                        <p className="text-sm text-muted-foreground">{reactingUser?.email || ''}</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl">{reaction.emoji}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Group Photo Dialog */}
+      <Dialog open={isEditPhotoOpen} onOpenChange={setIsEditPhotoOpen}>
+        <DialogContent className="sm:max-w-[425px]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>تحديث صورة المجموعة</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex flex-col items-center gap-4">
+              <Avatar className="w-24 h-24 ring-4 ring-primary/20">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-2xl">
+                  <Users className="w-12 h-12" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="text-center">
+                <h3 className="font-semibold">{selectedRoom?.name}</h3>
+                <p className="text-sm text-muted-foreground">صورة المجموعة الحالية</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label>رابط الصورة الجديدة (URL)</Label>
+              <Input
+                placeholder="https://example.com/image.jpg"
+              />
+              <Button className="w-full" onClick={() => {
+                toast({
+                  title: "قيد التطوير",
+                  description: "ميزة تحديث صورة المجموعة ستتوفر قريباً",
+                });
+                setIsEditPhotoOpen(false);
+              }}>
+                <Camera className="ml-2 h-4 w-4" />
+                تحديث الصورة
+              </Button>
+            </div>
+
+            <div className="text-center text-sm text-muted-foreground">
+              <p>أو اسحب صورة هنا للتحميل</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

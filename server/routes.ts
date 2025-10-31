@@ -39,7 +39,8 @@ export function registerRoutes(app: Express): Server {
       const tasks = await storage.getUserTasks(req.user!.id);
       res.json(tasks);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في جلب المهام" });
+      console.error('Error fetching user tasks:', error);
+      res.status(500).json({ message: "حدث خطأ في جلب المهام", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -48,7 +49,36 @@ export function registerRoutes(app: Express): Server {
       const tasks = await storage.getAssignedTasks(req.user!.id);
       res.json(tasks);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في جلب المهام المعينة" });
+      console.error('Error fetching assigned tasks:', error);
+      res.status(500).json({ message: "حدث خطأ في جلب المهام المعينة", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.get("/api/tasks/search", requireAuth, async (req, res) => {
+    try {
+      const query = (req.query.q as string || '').toLowerCase();
+      if (!query) {
+        return res.json([]);
+      }
+
+      // Get all tasks the user has access to
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+      const tasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      // Search in title, description, company name, and tags
+      const results = tasks.filter(task =>
+        task.title?.toLowerCase().includes(query) ||
+        task.description?.toLowerCase().includes(query) ||
+        task.companyName?.toLowerCase().includes(query) ||
+        task.tags?.some(tag => tag.toLowerCase().includes(query))
+      );
+
+      res.json(results);
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ message: "حدث خطأ في البحث" });
     }
   });
 
@@ -79,7 +109,8 @@ export function registerRoutes(app: Express): Server {
           task.assignedTo,
           "مهمة جديدة معينة لك",
           `تم تعيين مهمة "${task.title}" لك`,
-          "info"
+          "info",
+          { redirectUrl: `/tasks?taskId=${task.id}`, taskId: task.id, type: 'task_assigned' }
         );
       }
       
@@ -347,6 +378,76 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Dashboard routes
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    try {
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      // Get tasks based on user role
+      const tasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      // Calculate stats
+      const totalTasks = tasks.length;
+      const pendingTasks = tasks.filter(t => t.status === 'pending').length;
+      const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
+      const completedTasks = tasks.filter(t => t.status === 'completed').length;
+
+      // Get team members count
+      const users = await storage.getUsers();
+      const teamMembers = isAdminOrSubAdmin ? users.length : users.filter(u => u.department === req.user!.department).length;
+
+      // Calculate completion rate
+      const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+      // Get active projects (unique companies from tasks)
+      const activeProjects = [...new Set(tasks.map(t => t.companyId).filter(Boolean))].length;
+
+      res.json({
+        totalTasks,
+        pendingTasks: pendingTasks + inProgressTasks,
+        completedTasks,
+        teamMembers,
+        completionRate,
+        activeProjects,
+      });
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
+      res.status(500).json({ message: "حدث خطأ في جلب إحصائيات لوحة التحكم" });
+    }
+  });
+
+  app.get("/api/dashboard/activity", requireAuth, async (req, res) => {
+    try {
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      // Get recent tasks
+      const tasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      // Get recent activity (last 10 task status changes)
+      const recentActivity = tasks
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+        .slice(0, 10)
+        .map(task => ({
+          id: task.id,
+          type: task.status === 'completed' ? 'task_completed' : 'task_created',
+          message: task.status === 'completed'
+            ? `تم إكمال المهمة: ${task.title}`
+            : `تم إنشاء مهمة جديدة: ${task.title}`,
+          timestamp: task.updatedAt || task.createdAt,
+          user: task.createdByName || task.assignedToName,
+        }));
+
+      res.json(recentActivity);
+    } catch (error) {
+      console.error("Dashboard activity error:", error);
+      res.status(500).json({ message: "حدث خطأ في جلب نشاط لوحة التحكم" });
+    }
+  });
+
   // Users routes
   app.get("/api/users", requireAuth, async (req, res) => {
     try {
@@ -395,7 +496,10 @@ export function registerRoutes(app: Express): Server {
       });
     } catch (error) {
       console.error("Error creating employee:", error);
-      res.status(500).json({ message: "حدث خطأ في إضافة الموظف" });
+      res.status(500).json({
+        message: "حدث خطأ في إضافة الموظف",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
@@ -529,21 +633,27 @@ export function registerRoutes(app: Express): Server {
       // Notify admins
       const admins = await storage.getUsers();
       const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
-      
+
+      const notifications = [];
       for (const admin of adminUsers) {
         const notification = await storage.createNotification(
           admin.id,
           "طلب إجازة جديد",
           `${req.user!.fullName} قدم طلب إجازة جديد`,
-          "info"
+          "info",
+          { redirectUrl: `/employee-requests`, leaveId: leaveRequest.id, type: 'leave_request' }
         );
-        
-        // Broadcast notification via WebSocket
+        notifications.push(notification);
+      }
+
+      // Broadcast notifications via WebSocket
+      // Each client should filter notifications based on userId
+      if (notifications.length > 0) {
         wss.clients.forEach((client) => {
           if (client.readyState === client.OPEN) {
             client.send(JSON.stringify({
-              type: 'new_notification',
-              data: notification
+              type: 'new_notifications',
+              data: notifications
             }));
           }
         });
@@ -593,7 +703,8 @@ export function registerRoutes(app: Express): Server {
         leaveRequest.userId,
         "تحديث طلب الإجازة",
         `${statusText} طلب الإجازة الخاص بك`,
-        leaveRequest.status === 'approved' ? 'success' : 'error'
+        leaveRequest.status === 'approved' ? 'success' : 'error',
+        { redirectUrl: `/my-requests`, leaveId: leaveRequest.id, type: 'leave_status_update' }
       );
       
       // Broadcast notification via WebSocket
@@ -608,7 +719,8 @@ export function registerRoutes(app: Express): Server {
       
       res.json(leaveRequest);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في تحديث طلب الإجازة" });
+      console.error('Error updating leave request:', error);
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب الإجازة", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -621,10 +733,39 @@ export function registerRoutes(app: Express): Server {
         reason: req.body.reason,
         repaymentDate: req.body.repaymentDate ? new Date(req.body.repaymentDate) : null,
       });
-      
+
+      // Notify admins
+      const admins = await storage.getUsers();
+      const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
+
+      const notifications = [];
+      for (const admin of adminUsers) {
+        const notification = await storage.createNotification(
+          admin.id,
+          "طلب سلفة جديد",
+          `${req.user!.fullName} قدم طلب سلفة جديد`,
+          "info",
+          { redirectUrl: `/employee-requests`, advanceId: advanceRequest.id, type: 'salary_advance_request' }
+        );
+        notifications.push(notification);
+      }
+
+      // Broadcast notifications via WebSocket
+      if (notifications.length > 0) {
+        wss.clients.forEach((client) => {
+          if (client.readyState === client.OPEN) {
+            client.send(JSON.stringify({
+              type: 'new_notifications',
+              data: notifications
+            }));
+          }
+        });
+      }
+
       res.status(201).json(advanceRequest);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في إنشاء طلب السلفة" });
+      console.error('Error creating salary advance:', error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء طلب السلفة", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -653,24 +794,442 @@ export function registerRoutes(app: Express): Server {
         approvedBy: req.user!.id,
         approvedAt: new Date(),
       };
-      
+
       const advanceRequest = await storage.updateSalaryAdvanceRequest(req.params.id, updates);
       if (!advanceRequest) {
         return res.status(404).json({ message: "طلب السلفة غير موجود" });
       }
-      
+
       // Notify employee
       const statusText = advanceRequest.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
-      await storage.createNotification(
+      const notification = await storage.createNotification(
         advanceRequest.userId,
         "تحديث طلب السلفة",
         `${statusText} طلب السلفة الخاص بك`,
-        advanceRequest.status === 'approved' ? 'success' : 'error'
+        advanceRequest.status === 'approved' ? 'success' : 'error',
+        { redirectUrl: `/my-requests`, advanceId: advanceRequest.id, type: 'salary_advance_status_update' }
       );
-      
+
+      // Broadcast notification via WebSocket
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_notification',
+            data: notification
+          }));
+        }
+      });
+
       res.json(advanceRequest);
     } catch (error) {
-      res.status(500).json({ message: "حدث خطأ في تحديث طلب السلفة" });
+      console.error('Error updating salary advance:', error);
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب السلفة", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Deduction routes
+  app.post("/api/deductions", requireAuth, async (req, res) => {
+    try {
+      const deduction = await storage.createDeduction({
+        userId: req.user!.id,
+        amount: req.body.amount,
+        reason: req.body.reason,
+        deductionDate: req.body.deductionDate ? new Date(req.body.deductionDate) : new Date(),
+      });
+
+      // Notify admins
+      const admins = await storage.getUsers();
+      const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
+
+      const notifications = [];
+      for (const admin of adminUsers) {
+        const notification = await storage.createNotification(
+          admin.id,
+          "طلب خصم جديد",
+          `${req.user!.fullName} قدم طلب خصم جديد`,
+          "info",
+          { redirectUrl: `/employee-requests`, deductionId: deduction.id, type: 'deduction_request' }
+        );
+        notifications.push(notification);
+      }
+
+      // Broadcast notifications via WebSocket
+      if (notifications.length > 0) {
+        wss.clients.forEach((client) => {
+          if (client.readyState === client.OPEN) {
+            client.send(JSON.stringify({
+              type: 'new_notifications',
+              data: notifications
+            }));
+          }
+        });
+      }
+
+      res.status(201).json(deduction);
+    } catch (error) {
+      console.error('Error creating deduction:', error);
+      res.status(500).json({ message: "حدث خطأ في إضافة الخصم" });
+    }
+  });
+
+  app.get("/api/deductions/my", requireAuth, async (req, res) => {
+    try {
+      const deductions = await storage.getUserDeductions(req.user!.id);
+      res.json(deductions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الخصومات" });
+    }
+  });
+
+  app.get("/api/deductions/pending", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const deductions = await storage.getPendingDeductions();
+      res.json(deductions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الخصومات" });
+    }
+  });
+
+  app.get("/api/deductions", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const deductions = await storage.getAllDeductions();
+      res.json(deductions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الخصومات" });
+    }
+  });
+
+  app.put("/api/deductions/:id", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const updates = {
+        ...req.body,
+        approvedBy: req.user!.id,
+        approvedAt: new Date(),
+      };
+
+      const deduction = await storage.updateDeduction(req.params.id, updates);
+      if (!deduction) {
+        return res.status(404).json({ message: "طلب الخصم غير موجود" });
+      }
+
+      // Notify employee
+      const statusText = deduction.status === 'approved' ? 'تمت الموافقة على' : 'تم رفض';
+      const notification = await storage.createNotification(
+        deduction.userId,
+        "تحديث طلب الخصم",
+        `${statusText} طلب الخصم الخاص بك`,
+        deduction.status === 'approved' ? 'success' : 'error',
+        { redirectUrl: `/my-requests`, deductionId: deduction.id, type: 'deduction_status_update' }
+      );
+
+      // Broadcast notification via WebSocket
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({
+            type: 'new_notification',
+            data: notification
+          }));
+        }
+      });
+
+      res.json(deduction);
+    } catch (error) {
+      console.error('Error updating deduction:', error);
+      res.status(500).json({ message: "حدث خطأ في تحديث طلب الخصم", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Company routes
+  app.post("/api/companies", requireAuth, async (req, res) => {
+    try {
+      const company = await storage.createCompany({
+        ...req.body,
+        createdBy: req.user!.id,
+      });
+      res.status(201).json(company);
+    } catch (error) {
+      console.error('Error creating company:', error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء الشركة" });
+    }
+  });
+
+  app.get("/api/companies", requireAuth, async (req, res) => {
+    try {
+      const companies = await storage.getAllCompanies();
+      res.json(companies);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الشركات" });
+    }
+  });
+
+  app.get("/api/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) {
+        return res.status(404).json({ message: "الشركة غير موجودة" });
+      }
+      res.json(company);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الشركة" });
+    }
+  });
+
+  app.put("/api/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const company = await storage.updateCompany(req.params.id, req.body);
+      if (!company) {
+        return res.status(404).json({ message: "الشركة غير موجودة" });
+      }
+      res.json(company);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تحديث الشركة" });
+    }
+  });
+
+  app.delete("/api/companies/:id", requireAuth, async (req, res) => {
+    try {
+      const success = await storage.deleteCompany(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "الشركة غير موجودة" });
+      }
+      res.json({ message: "تم حذف الشركة بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في حذف الشركة" });
+    }
+  });
+
+  app.post("/api/companies/:id/team", requireAuth, async (req, res) => {
+    try {
+      await storage.addCompanyTeamMember(req.params.id, req.body.userId, req.body.role);
+      res.json({ message: "تم إضافة عضو الفريق بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إضافة عضو الفريق" });
+    }
+  });
+
+  app.get("/api/companies/:id/team", requireAuth, async (req, res) => {
+    try {
+      const members = await storage.getCompanyTeamMembers(req.params.id);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب أعضاء الفريق" });
+    }
+  });
+
+  app.delete("/api/companies/:companyId/team/:userId", requireAuth, async (req, res) => {
+    try {
+      await storage.removeCompanyTeamMember(req.params.companyId, req.params.userId);
+      res.json({ message: "تم إزالة عضو الفريق بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إزالة عضو الفريق" });
+    }
+  });
+
+  app.post("/api/companies/:id/files", requireAuth, async (req, res) => {
+    try {
+      const file = await storage.addCompanyFile({
+        companyId: req.params.id,
+        name: req.body.name,
+        fileUrl: req.body.fileUrl,
+        fileType: req.body.fileType,
+        fileSize: req.body.fileSize,
+        uploadedBy: req.user!.id,
+      });
+      res.status(201).json(file);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في إضافة الملف" });
+    }
+  });
+
+  app.get("/api/companies/:id/files", requireAuth, async (req, res) => {
+    try {
+      const files = await storage.getCompanyFiles(req.params.id);
+      res.json(files);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب الملفات" });
+    }
+  });
+
+  app.delete("/api/companies/files/:fileId", requireAuth, async (req, res) => {
+    try {
+      const success = await storage.deleteCompanyFile(req.params.fileId);
+      if (!success) {
+        return res.status(404).json({ message: "الملف غير موجود" });
+      }
+      res.json({ message: "تم حذف الملف بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في حذف الملف" });
+    }
+  });
+
+  // Suggestion routes
+  app.post("/api/suggestions", requireAuth, async (req, res) => {
+    try {
+      const suggestion = await storage.createSuggestion({
+        userId: req.user!.id,
+        title: req.body.title,
+        description: req.body.description,
+        category: req.body.category,
+      });
+
+      // Notify admins
+      const admins = await storage.getUsers();
+      const adminUsers = admins.filter(u => u.role === 'admin' || u.role === 'sub-admin');
+
+      for (const admin of adminUsers) {
+        await storage.createNotification(
+          admin.id,
+          "مقترح جديد",
+          `${req.user!.fullName} قدم مقترحاً جديداً: ${suggestion.title}`,
+          "info"
+        );
+      }
+
+      res.status(201).json(suggestion);
+    } catch (error) {
+      console.error('Error creating suggestion:', error);
+      res.status(500).json({ message: "حدث خطأ في إنشاء المقترح" });
+    }
+  });
+
+  app.get("/api/suggestions", requireAuth, requireRole(['admin', 'sub-admin']), async (req, res) => {
+    try {
+      const suggestions = await storage.getAllSuggestions();
+      res.json(suggestions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب المقترحات" });
+    }
+  });
+
+  app.get("/api/suggestions/my", requireAuth, async (req, res) => {
+    try {
+      const suggestions = await storage.getUserSuggestions(req.user!.id);
+      res.json(suggestions);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في جلب المقترحات" });
+    }
+  });
+
+  app.put("/api/suggestions/:id", requireAuth, async (req, res) => {
+    try {
+      // Check if user owns the suggestion or is admin
+      const suggestion = await storage.getAllSuggestions();
+      const existingSuggestion = suggestion.find(s => s.id === req.params.id);
+
+      if (!existingSuggestion) {
+        return res.status(404).json({ message: "المقترح غير موجود" });
+      }
+
+      const isOwner = existingSuggestion.userId === req.user!.id;
+      const isAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ message: "غير مصرح لك بتعديل هذا المقترح" });
+      }
+
+      const updates = isAdmin ? {
+        ...req.body,
+        respondedBy: req.body.status !== 'pending' ? req.user!.id : undefined,
+        respondedAt: req.body.status !== 'pending' ? new Date() : undefined,
+      } : {
+        title: req.body.title,
+        description: req.body.description,
+        category: req.body.category,
+      };
+
+      const updatedSuggestion = await storage.updateSuggestion(req.params.id, updates);
+
+      // Notify user if admin updated status
+      if (isAdmin && req.body.status && req.body.status !== 'pending') {
+        await storage.createNotification(
+          existingSuggestion.userId,
+          "تحديث على مقترحك",
+          `تم تحديث حالة مقترحك "${existingSuggestion.title}" إلى ${req.body.status}`,
+          "info"
+        );
+      }
+
+      res.json(updatedSuggestion);
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في تحديث المقترح" });
+    }
+  });
+
+  app.delete("/api/suggestions/:id", requireAuth, async (req, res) => {
+    try {
+      // Check if user owns the suggestion or is admin
+      const suggestions = await storage.getAllSuggestions();
+      const suggestion = suggestions.find(s => s.id === req.params.id);
+
+      if (!suggestion) {
+        return res.status(404).json({ message: "المقترح غير موجود" });
+      }
+
+      const isOwner = suggestion.userId === req.user!.id;
+      const isAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ message: "غير مصرح لك بحذف هذا المقترح" });
+      }
+
+      const success = await storage.deleteSuggestion(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "المقترح غير موجود" });
+      }
+
+      res.json({ message: "تم حذف المقترح بنجاح" });
+    } catch (error) {
+      res.status(500).json({ message: "حدث خطأ في حذف المقترح" });
+    }
+  });
+
+  // Search routes
+  app.get("/api/search", requireAuth, async (req, res) => {
+    try {
+      const query = (req.query.q as string || '').toLowerCase();
+      if (!query) {
+        return res.json({ tasks: [], users: [], companies: [] });
+      }
+
+      // Search tasks
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+      const allTasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      const tasks = allTasks.filter(task =>
+        task.title?.toLowerCase().includes(query) ||
+        task.description?.toLowerCase().includes(query) ||
+        task.companyName?.toLowerCase().includes(query) ||
+        task.tags?.some(tag => tag.toLowerCase().includes(query))
+      );
+
+      // Search users
+      const allUsers = await storage.getUsers();
+      const users = allUsers.filter(user =>
+        user.fullName?.toLowerCase().includes(query) ||
+        user.email?.toLowerCase().includes(query) ||
+        user.department?.toLowerCase().includes(query)
+      ).map(user => ({
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        department: user.department,
+        profilePicture: user.profilePicture
+      }));
+
+      // Search companies
+      const allCompanies = await storage.getAllCompanies();
+      const companies = allCompanies.filter(company =>
+        company.name?.toLowerCase().includes(query) ||
+        company.description?.toLowerCase().includes(query) ||
+        company.industry?.toLowerCase().includes(query)
+      );
+
+      res.json({ tasks, users, companies });
+    } catch (error) {
+      console.error("Global search error:", error);
+      res.status(500).json({ message: "حدث خطأ في البحث" });
     }
   });
 

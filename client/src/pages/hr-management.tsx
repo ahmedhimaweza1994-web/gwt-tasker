@@ -32,6 +32,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Redirect, Link } from "wouter";
+import { exportToExcel, exportToPDF } from "@/lib/export-utils";
 import type { User, LeaveRequest, SalaryAdvanceRequest } from "@shared/schema";
 
 interface HRStats {
@@ -107,52 +108,56 @@ export default function HRManagement() {
   });
 
   // Fetch pending leave requests (admin only)
-  const { data: pendingLeaveRequests = [] } = useQuery<LeaveRequest[]>({
+  const { data: pendingLeaveRequests = [], isLoading: isLoadingLeaves } = useQuery<LeaveRequest[]>({
     queryKey: ["/api/leaves/pending"],
     enabled: isAdmin,
   });
 
   // Fetch pending salary advance requests (admin only)
-  const { data: pendingSalaryAdvances = [] } = useQuery<SalaryAdvanceRequest[]>({
+  const { data: pendingSalaryAdvances = [], isLoading: isLoadingAdvances } = useQuery<SalaryAdvanceRequest[]>({
     queryKey: ["/api/salary-advances/pending"],
     enabled: isAdmin,
   });
 
   // Fetch user's own leave requests (employee)
-  const { data: userLeaveRequests = [] } = useQuery<LeaveRequest[]>({
+  const { data: userLeaveRequests = [], isLoading: isLoadingUserLeaves } = useQuery<LeaveRequest[]>({
     queryKey: ["/api/leaves"],
     enabled: !isAdmin,
   });
 
   // Fetch user's own salary advance requests (employee)
-  const { data: userSalaryAdvances = [] } = useQuery<SalaryAdvanceRequest[]>({
+  const { data: userSalaryAdvances = [], isLoading: isLoadingUserAdvances } = useQuery<SalaryAdvanceRequest[]>({
     queryKey: ["/api/salary-advances/user"],
     enabled: !isAdmin,
   });
 
   // Fetch all users for HR purposes (admin only)
-  const { data: allUsers = [] } = useQuery<User[]>({
+  const { data: allUsers = [], isLoading: isLoadingUsers } = useQuery<User[]>({
     queryKey: ["/api/users"],
     enabled: isAdmin,
   });
 
   // Fetch HR stats (admin only)
-  const { data: hrStats } = useQuery<HRStats>({
+  const { data: hrStats, isLoading: isLoadingStats } = useQuery<HRStats>({
     queryKey: ["/api/hr/stats"],
     enabled: isAdmin,
   });
 
   // Fetch payroll data (admin only)
-  const { data: payrollData = [] } = useQuery<PayrollEntry[]>({
+  const { data: payrollData = [], isLoading: isLoadingPayroll } = useQuery<PayrollEntry[]>({
     queryKey: ["/api/hr/payroll"],
     enabled: isAdmin,
   });
 
   // Fetch HR reports (admin only)
-  const { data: hrReports } = useQuery<HRReports>({
+  const { data: hrReports, isLoading: isLoadingReports } = useQuery<HRReports>({
     queryKey: ["/api/hr/reports"],
     enabled: isAdmin,
   });
+
+  const isLoading = isLoadingLeaves || isLoadingAdvances || isLoadingUserLeaves ||
+                    isLoadingUserAdvances || isLoadingUsers || isLoadingStats ||
+                    isLoadingPayroll || isLoadingReports;
 
   // Employee leave request mutation
   const createLeaveRequestMutation = useMutation({
@@ -264,6 +269,13 @@ export default function HRManagement() {
         description: "تم إضافة الموظف الجديد بنجاح",
       });
     },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إضافة الموظف",
+        variant: "destructive",
+      });
+    },
   });
 
   // Update employee mutation
@@ -284,6 +296,30 @@ export default function HRManagement() {
     },
   });
 
+  // Delete employee mutation
+  const deleteEmployeeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/employees/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hr/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hr/payroll"] });
+      toast({
+        title: "تم حذف الموظف",
+        description: "تم حذف الموظف من النظام",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل حذف الموظف",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleApproveLeave = (id: string) => {
     updateLeaveMutation.mutate({ id, status: "approved" });
   };
@@ -298,6 +334,72 @@ export default function HRManagement() {
 
   const handleRejectSalaryAdvance = (id: string, reason: string) => {
     updateSalaryAdvanceMutation.mutate({ id, status: "rejected", rejectionReason: reason });
+  };
+
+  const handleExportExcel = () => {
+    if (!hrReports || !hrStats) {
+      toast({
+        title: "لا توجد بيانات",
+        description: "لا توجد بيانات للتصدير",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const exportData = {
+      stats: {
+        avgProductivity: hrReports.attendanceRate,
+        totalWorkHours: hrReports.avgWorkHoursPerDay * 30,
+        completedTasksCount: 0,
+        activeEmployees: hrStats.presentToday,
+        totalEmployees: hrStats.totalEmployees,
+      },
+      departmentStats: hrReports.departmentDistribution?.map(dept => ({
+        department: dept.dept,
+        employeeCount: dept.count,
+        completedTasks: 0,
+        averageProductivity: dept.percentage,
+      })),
+    };
+
+    exportToExcel(exportData, "hr-report");
+    toast({
+      title: "تم التصدير",
+      description: "تم تصدير التقرير إلى Excel بنجاح",
+    });
+  };
+
+  const handleExportPDF = () => {
+    if (!hrReports || !hrStats) {
+      toast({
+        title: "لا توجد بيانات",
+        description: "لا توجد بيانات للتصدير",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const exportData = {
+      stats: {
+        avgProductivity: hrReports.attendanceRate,
+        totalWorkHours: hrReports.avgWorkHoursPerDay * 30,
+        completedTasksCount: 0,
+        activeEmployees: hrStats.presentToday,
+        totalEmployees: hrStats.totalEmployees,
+      },
+      departmentStats: hrReports.departmentDistribution?.map(dept => ({
+        department: dept.dept,
+        employeeCount: dept.count,
+        completedTasks: 0,
+        averageProductivity: dept.percentage,
+      })),
+    };
+
+    exportToPDF(exportData, "hr-report", "تقرير الموارد البشرية");
+    toast({
+      title: "تم التصدير",
+      description: "تم تصدير التقرير إلى PDF بنجاح",
+    });
   };
 
   const getLeaveTypeLabel = (type: string) => {
@@ -592,6 +694,13 @@ export default function HRManagement() {
         <Sidebar />
         
         <main className={cn("flex-1 p-6 transition-all duration-300", isCollapsed ? "mr-16" : "mr-64")}>
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent mb-4"></div>
+              <p className="text-muted-foreground">جاري تحميل البيانات...</p>
+            </div>
+          ) : (
+            <>
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -1027,18 +1136,18 @@ export default function HRManagement() {
                           
                           <div className="flex gap-2 mt-4">
                             <Link href={`/user-profile/${employee.id}`} className="flex-1">
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
-                                className="w-full" 
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
                                 data-testid={`button-view-employee-${employee.id}`}
                               >
                                 عرض الملف
                               </Button>
                             </Link>
-                            <Button 
-                              size="sm" 
-                              className="flex-1" 
+                            <Button
+                              size="sm"
+                              className="flex-1"
                               onClick={() => {
                                 setSelectedEmployee(employee);
                                 setIsEditEmployeeDialogOpen(true);
@@ -1047,6 +1156,20 @@ export default function HRManagement() {
                             >
                               تعديل
                             </Button>
+                            {user?.role === 'admin' && employee.id !== user?.id && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  if (confirm(`هل أنت متأكد من حذف الموظف "${employee.fullName}"؟`)) {
+                                    deleteEmployeeMutation.mutate(employee.id);
+                                  }
+                                }}
+                                data-testid={`button-delete-employee-${employee.id}`}
+                              >
+                                حذف
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -1058,6 +1181,16 @@ export default function HRManagement() {
 
             {/* HR Reports Tab */}
             <TabsContent value="reports">
+              <div className="flex justify-end gap-2 mb-4">
+                <Button variant="outline" onClick={handleExportExcel}>
+                  <FileText className="ml-2 h-4 w-4" />
+                  تصدير Excel
+                </Button>
+                <Button variant="outline" onClick={handleExportPDF}>
+                  <FileText className="ml-2 h-4 w-4" />
+                  تصدير PDF
+                </Button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card data-testid="card-attendance-summary">
                   <CardHeader>
@@ -1109,6 +1242,8 @@ export default function HRManagement() {
               </div>
             </TabsContent>
           </Tabs>
+            </>
+          )}
         </main>
       </div>
 

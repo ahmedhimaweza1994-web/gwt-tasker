@@ -6,34 +6,42 @@ import { SidebarProvider } from "@/contexts/sidebar-context";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Toaster } from "@/components/ui/toaster";
 import AuthPage from "@/pages/auth-page";
-import Dashboard from "@/pages/dashboard";
+import ModernDashboard from "@/pages/modern-dashboard";
+import ModernTaskBoard from "@/pages/modern-task-board";
 import AdminDashboard from "@/pages/admin-dashboard";
 import TaskManagement from "@/pages/task-management";
 import UserProfile from "@/pages/user-profile";
 import Reports from "@/pages/reports";
-import HRManagement from "@/pages/hr-management";
+import ModernHRManagement from "@/pages/modern-hr-management";
 import UserManagement from "@/pages/user-management";
-import Chat from "@/pages/chat";
-import MyRequests from "@/pages/my-requests";
+import ModernChat from "@/pages/modern-chat";
+import ModernMyRequests from "@/pages/modern-my-requests";
+import ModernCompanies from "@/pages/modern-companies";
+import ModernAIModels from "@/pages/modern-ai-models";
+import ModernSuggestions from "@/pages/modern-suggestions";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
-      <ProtectedRoute path="/" component={Dashboard} />
-      <ProtectedRoute path="/dashboard" component={Dashboard} />
+      <ProtectedRoute path="/" component={ModernDashboard} />
+      <ProtectedRoute path="/dashboard" component={ModernDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
-      <ProtectedRoute path="/tasks" component={TaskManagement} />
+      <ProtectedRoute path="/tasks" component={ModernTaskBoard} />
+      <ProtectedRoute path="/companies" component={ModernCompanies} />
       <ProtectedRoute path="/profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/user-profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/reports" component={Reports} />
-      <ProtectedRoute path="/hr" component={HRManagement} />
+      <ProtectedRoute path="/hr" component={ModernHRManagement} />
+      <ProtectedRoute path="/hr-management" component={ModernHRManagement} />
       <ProtectedRoute path="/user-management" component={UserManagement} />
-      <ProtectedRoute path="/chat" component={Chat} />
-      <ProtectedRoute path="/my-requests" component={MyRequests} />
-      <ProtectedRoute path="/settings" component={Dashboard} />
+      <ProtectedRoute path="/chat" component={ModernChat} />
+      <ProtectedRoute path="/my-requests" component={ModernMyRequests} />
+      <ProtectedRoute path="/suggestions" component={ModernSuggestions} />
+      <ProtectedRoute path="/ai-models" component={ModernAIModels} />
+      <ProtectedRoute path="/settings" component={ModernDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
