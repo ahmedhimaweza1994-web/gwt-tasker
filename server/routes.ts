@@ -378,6 +378,76 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Dashboard routes
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    try {
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      // Get tasks based on user role
+      const tasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      // Calculate stats
+      const totalTasks = tasks.length;
+      const pendingTasks = tasks.filter(t => t.status === 'pending').length;
+      const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
+      const completedTasks = tasks.filter(t => t.status === 'completed').length;
+
+      // Get team members count
+      const users = await storage.getUsers();
+      const teamMembers = isAdminOrSubAdmin ? users.length : users.filter(u => u.department === req.user!.department).length;
+
+      // Calculate completion rate
+      const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+      // Get active projects (unique companies from tasks)
+      const activeProjects = [...new Set(tasks.map(t => t.companyId).filter(Boolean))].length;
+
+      res.json({
+        totalTasks,
+        pendingTasks: pendingTasks + inProgressTasks,
+        completedTasks,
+        teamMembers,
+        completionRate,
+        activeProjects,
+      });
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
+      res.status(500).json({ message: "حدث خطأ في جلب إحصائيات لوحة التحكم" });
+    }
+  });
+
+  app.get("/api/dashboard/activity", requireAuth, async (req, res) => {
+    try {
+      const isAdminOrSubAdmin = req.user!.role === 'admin' || req.user!.role === 'sub-admin';
+
+      // Get recent tasks
+      const tasks = isAdminOrSubAdmin
+        ? await storage.getAllTasks()
+        : [...await storage.getUserTasks(req.user!.id), ...await storage.getAssignedTasks(req.user!.id)];
+
+      // Get recent activity (last 10 task status changes)
+      const recentActivity = tasks
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+        .slice(0, 10)
+        .map(task => ({
+          id: task.id,
+          type: task.status === 'completed' ? 'task_completed' : 'task_created',
+          message: task.status === 'completed'
+            ? `تم إكمال المهمة: ${task.title}`
+            : `تم إنشاء مهمة جديدة: ${task.title}`,
+          timestamp: task.updatedAt || task.createdAt,
+          user: task.createdByName || task.assignedToName,
+        }));
+
+      res.json(recentActivity);
+    } catch (error) {
+      console.error("Dashboard activity error:", error);
+      res.status(500).json({ message: "حدث خطأ في جلب نشاط لوحة التحكم" });
+    }
+  });
+
   // Users routes
   app.get("/api/users", requireAuth, async (req, res) => {
     try {
