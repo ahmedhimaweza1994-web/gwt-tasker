@@ -14,7 +14,7 @@ import UserProfile from "@/pages/user-profile";
 import Reports from "@/pages/reports";
 import HRManagement from "@/pages/hr-management";
 import UserManagement from "@/pages/user-management";
-import Chat from "@/pages/chat";
+import ModernChat from "@/pages/modern-chat";
 import MyRequests from "@/pages/my-requests";
 import Companies from "@/pages/companies";
 import AIModels from "@/pages/ai-models";
@@ -36,7 +36,7 @@ function Router() {
       <ProtectedRoute path="/reports" component={Reports} />
       <ProtectedRoute path="/hr" component={HRManagement} />
       <ProtectedRoute path="/user-management" component={UserManagement} />
-      <ProtectedRoute path="/chat" component={Chat} />
+      <ProtectedRoute path="/chat" component={ModernChat} />
       <ProtectedRoute path="/my-requests" component={MyRequests} />
       <ProtectedRoute path="/suggestions" component={Suggestions} />
       <ProtectedRoute path="/ai-models" component={AIModels} />
