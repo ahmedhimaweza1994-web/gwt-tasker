@@ -12,7 +12,7 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import TaskManagement from "@/pages/task-management";
 import UserProfile from "@/pages/user-profile";
 import Reports from "@/pages/reports";
-import HRManagement from "@/pages/hr-management";
+import ModernHRManagement from "@/pages/modern-hr-management";
 import UserManagement from "@/pages/user-management";
 import ModernChat from "@/pages/modern-chat";
 import MyRequests from "@/pages/my-requests";
@@ -34,7 +34,8 @@ function Router() {
       <ProtectedRoute path="/profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/user-profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/reports" component={Reports} />
-      <ProtectedRoute path="/hr" component={HRManagement} />
+      <ProtectedRoute path="/hr" component={ModernHRManagement} />
+      <ProtectedRoute path="/hr-management" component={ModernHRManagement} />
       <ProtectedRoute path="/user-management" component={UserManagement} />
       <ProtectedRoute path="/chat" component={ModernChat} />
       <ProtectedRoute path="/my-requests" component={MyRequests} />
