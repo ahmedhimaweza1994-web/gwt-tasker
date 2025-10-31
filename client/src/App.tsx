@@ -15,10 +15,10 @@ import Reports from "@/pages/reports";
 import ModernHRManagement from "@/pages/modern-hr-management";
 import UserManagement from "@/pages/user-management";
 import ModernChat from "@/pages/modern-chat";
-import MyRequests from "@/pages/my-requests";
-import Companies from "@/pages/companies";
-import AIModels from "@/pages/ai-models";
-import Suggestions from "@/pages/suggestions";
+import ModernMyRequests from "@/pages/modern-my-requests";
+import ModernCompanies from "@/pages/modern-companies";
+import ModernAIModels from "@/pages/modern-ai-models";
+import ModernSuggestions from "@/pages/modern-suggestions";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -30,7 +30,7 @@ function Router() {
       <ProtectedRoute path="/admin" component={AdminDashboard} />
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
       <ProtectedRoute path="/tasks" component={ModernTaskBoard} />
-      <ProtectedRoute path="/companies" component={Companies} />
+      <ProtectedRoute path="/companies" component={ModernCompanies} />
       <ProtectedRoute path="/profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/user-profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/reports" component={Reports} />
@@ -38,9 +38,9 @@ function Router() {
       <ProtectedRoute path="/hr-management" component={ModernHRManagement} />
       <ProtectedRoute path="/user-management" component={UserManagement} />
       <ProtectedRoute path="/chat" component={ModernChat} />
-      <ProtectedRoute path="/my-requests" component={MyRequests} />
-      <ProtectedRoute path="/suggestions" component={Suggestions} />
-      <ProtectedRoute path="/ai-models" component={AIModels} />
+      <ProtectedRoute path="/my-requests" component={ModernMyRequests} />
+      <ProtectedRoute path="/suggestions" component={ModernSuggestions} />
+      <ProtectedRoute path="/ai-models" component={ModernAIModels} />
       <ProtectedRoute path="/settings" component={ModernDashboard} />
       <Route component={NotFound} />
     </Switch>
