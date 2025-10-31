@@ -6,7 +6,8 @@ import { SidebarProvider } from "@/contexts/sidebar-context";
 import { ProtectedRoute } from "@/lib/protected-route";
 import { Toaster } from "@/components/ui/toaster";
 import AuthPage from "@/pages/auth-page";
-import Dashboard from "@/pages/dashboard";
+import ModernDashboard from "@/pages/modern-dashboard";
+import ModernTaskBoard from "@/pages/modern-task-board";
 import AdminDashboard from "@/pages/admin-dashboard";
 import TaskManagement from "@/pages/task-management";
 import UserProfile from "@/pages/user-profile";
@@ -24,11 +25,11 @@ function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
-      <ProtectedRoute path="/" component={Dashboard} />
-      <ProtectedRoute path="/dashboard" component={Dashboard} />
+      <ProtectedRoute path="/" component={ModernDashboard} />
+      <ProtectedRoute path="/dashboard" component={ModernDashboard} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
       <ProtectedRoute path="/admin-dashboard" component={AdminDashboard} />
-      <ProtectedRoute path="/tasks" component={TaskManagement} />
+      <ProtectedRoute path="/tasks" component={ModernTaskBoard} />
       <ProtectedRoute path="/companies" component={Companies} />
       <ProtectedRoute path="/profile/:id?" component={UserProfile} />
       <ProtectedRoute path="/user-profile/:id?" component={UserProfile} />
@@ -39,7 +40,7 @@ function Router() {
       <ProtectedRoute path="/my-requests" component={MyRequests} />
       <ProtectedRoute path="/suggestions" component={Suggestions} />
       <ProtectedRoute path="/ai-models" component={AIModels} />
-      <ProtectedRoute path="/settings" component={Dashboard} />
+      <ProtectedRoute path="/settings" component={ModernDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
